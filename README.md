@@ -1,12 +1,12 @@
-ï»¿# miracle-private-website
+ÿþï»¿# miracle-private-website
 
 <img width="300" height="300" alt="Asset 6" src="https://github.com/user-attachments/assets/71b99e16-ed91-419e-93db-9454d204316f" />
 
 ## ðŸš€ Deskripsi Proyek
 
-`miracle-private-website` adalah Sistem Manajemen Bimbingan Belajar (LMS) komprehensif yang dirancang untuk mengelola seluruh operasional Bimbel, mulai dari data murid dan mentor, jadwal, absensi, hingga rekapitulasi pembayaran dan laporan keuangan.
+`miracle-private-website` adalah Sistem Manajemen Bimbingan Belajar (LMSkomprehensif yang dirancang untuk mengelola seluruh operasional Bimbel, mulai dari data murid dan mentor, jadwal, absensi, hingga rekapitulasi pembayaran dan laporan keuangan.
 
-Aplikasi ini memiliki arsitektur monolitik yang dibagi menjadi dua layanan terpisah (Frontend dan Backend) untuk skalabilitas yang lebih baik.
+Aplikasi ini memiliki arsitektur monolitik yang dibagi menjadi dua layanan terpisah (Frontend dan Backenduntuk skalabilitas yang lebih baik.
 
 ---
 
@@ -37,7 +37,7 @@ Aplikasi ini mencakup modul utama berikut dengan hak akses berjenjang (Owner, Ad
 
 Pastikan Anda telah menginstal perangkat lunak berikut:
 
-* [Node.js](https://nodejs.org/) (Versi 18 atau lebih tinggi)
+* [Node.js](https://nodejs.org/(Versi 18 atau lebih tinggi)
 * npm (atau Yarn/pnpm)
 * Akun [Supabase](https://supabase.com/) (untuk konfigurasi *database*)
 
