@@ -3,6 +3,8 @@
 import React, { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { saveAuth } from '../../../lib/auth'
+import Input from '../../../components/Input'
+import Button from '../../../components/Button'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'
 
@@ -41,20 +43,56 @@ export default function Page() {
   }
 
   return (
-    <div style={{ maxWidth: 420, margin: '40px auto' }}>
-      <h2>Login</h2>
-      <form onSubmit={handleSubmit}>
-        <div>
-          <label>Email</label>
-          <input value={email} onChange={(e) => setEmail(e.target.value)} />
-        </div>
-        <div>
-          <label>Password</label>
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
-        </div>
-        {error && <div style={{ color: 'red' }}>{error}</div>}
-        <button type="submit">Login</button>
-      </form>
+    <div className="fixed inset-0 flex items-center justify-center px-4 py-8" style={{ background: 'linear-gradient(180deg, #0077AF 0%, #003249 100%)' }}>
+      <div className="auth-card">
+        <h1 className="auth-heading">Login</h1>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="text-white font-medium mb-2 text-sm">Username or Email</label>
+            <div className="mt-2">
+              <Input
+                ariaLabel="username or email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Username or email"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-white font-medium mb-2 text-sm">Password</label>
+            <div className="mt-2">
+              <Input
+                ariaLabel="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Password"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between mt-2">
+            <label className="flex items-center gap-2 small-muted">
+              <input type="checkbox" className="rounded border-white/30" />
+              <span className="muted-text">Remember me</span>
+            </label>
+            <a className="small-muted hover:underline" href="#">Forgot?</a>
+          </div>
+
+          {error && <div className="text-red-300">{error}</div>}
+
+          <div className="flex justify-center mt-4">
+            <Button type="submit">Login</Button>
+          </div>
+
+          <div className="text-center mt-3 small-muted">
+            <span>Belum punya Akun ? </span>
+            <a href="/register" style={{ color: '#3DA9FB' }} className="hover:underline">Daftar Disini</a>
+          </div>
+        </form>
+      </div>
     </div>
   )
 }
