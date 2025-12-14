@@ -2,9 +2,7 @@
 "use client"
 
 import React, { useState, useEffect } from 'react';
-import Button from './Button'; 
-import Input from './Input'; 
-import { X, Plus } from 'lucide-react'; // Ikon untuk close dan tambah
+import { X, Plus } from 'lucide-react'; 
 import { createStudent, updateStudent, Student } from '@/lib/studentActions'; 
 
 interface MuridFormModalProps {
@@ -14,235 +12,134 @@ interface MuridFormModalProps {
     editingStudent: Student | null; 
 }
 
-// Update FormData untuk mencakup field baru sesuai gambar (Nama Ortu & HP Ortu)
-// NOTE: Pastikan database/backend Anda juga mendukung field 'parent_name' dan 'parent_phone'
-interface FormData { 
-    name: string;
-    age: number | string; // Mengizinkan string sementara untuk handling input kosong
-    phone_number: string;
-    address: string;
-    parent_name: string;  // Field Baru Sesuai Gambar
-    parent_phone: string; // Field Baru Sesuai Gambar
-    status: 'AKTIF' | 'NON-AKTIF';
-}
-
-const initialFormData: FormData = {
-    name: '',
-    age: '', // Kosongkan awal agar placeholder terlihat
-    phone_number: '',
-    address: '',
-    parent_name: '',
-    parent_phone: '',
-    status: 'AKTIF', 
-};
+// Helper Input Component untuk style "Pill" (rounded-full)
+const PillInput = ({ label, ...props }: any) => (
+    <div className="flex flex-col gap-2">
+        <label className="text-sm font-semibold text-gray-700 ml-1">{label}</label>
+        <input 
+            className="border border-gray-400 rounded-full px-5 py-2.5 focus:outline-none focus:border-[#0077AF] focus:ring-1 focus:ring-[#0077AF] text-sm"
+            {...props}
+        />
+    </div>
+);
 
 const MuridFormModal: React.FC<MuridFormModalProps> = ({ isOpen, onClose, onSuccess, editingStudent }) => {
     
-    const [formData, setFormData] = useState<FormData>(initialFormData);
+    // State Form
+    const [formData, setFormData] = useState({
+        name: '', age: '', phone_number: '', address: '', parent_name: '', parent_phone: '', status: 'AKTIF'
+    });
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-
-    const isEditMode = !!editingStudent;
 
     useEffect(() => {
         if (editingStudent) {
             setFormData({
                 name: editingStudent.name,
-                age: editingStudent.age,
+                age: editingStudent.age.toString(),
                 phone_number: editingStudent.phone_number,
                 address: editingStudent.address,
-                // Jika backend belum ada data ortu, gunakan string kosong atau ambil dari editingStudent jika sudah ada
-                parent_name: (editingStudent as any).parent_name || '', 
+                parent_name: (editingStudent as any).parent_name || '',
                 parent_phone: (editingStudent as any).parent_phone || '',
-                status: editingStudent.status,
+                status: editingStudent.status
             });
         } else {
-            setFormData(initialFormData);
+            setFormData({ name: '', age: '', phone_number: '', address: '', parent_name: '', parent_phone: '', status: 'AKTIF' });
         }
     }, [editingStudent, isOpen]);
-
-    if (!isOpen) return null;
-
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-        const { name, value } = e.target;
-        setFormData(prev => ({ 
-            ...prev, 
-            [name]: name === 'age' ? (value === '' ? '' : parseInt(value)) : value 
-        }));
-    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
-        setError(null);
-        
-        // Validasi Sederhana
-        if (!formData.name || !formData.phone_number || !formData.age) {
-             setError("Mohon lengkapi field yang bertanda bintang (*).");
-             setLoading(false);
-             return;
-        }
-
         try {
-            // Konversi age kembali ke number murni untuk pengiriman
-            const submissionData = {
-                ...formData,
-                age: Number(formData.age)
-            };
-
-            if (isEditMode && editingStudent?.id) {
-                await updateStudent(editingStudent.id, submissionData);
-            } else {
-                await createStudent(submissionData); 
-            }
-            
-            setFormData(initialFormData); 
-            onSuccess(); 
-            onClose(); 
-        } catch (err: any) {
-            setError(err.message || 'Terjadi kesalahan saat menyimpan data.');
-        } finally {
-            setLoading(false);
-        }
+            const payload = { ...formData, age: Number(formData.age) };
+            if (editingStudent?.id) await updateStudent(editingStudent.id, payload);
+            else await createStudent(payload);
+            onSuccess(); onClose();
+        } catch (error) {
+            alert('Gagal menyimpan data');
+        } finally { setLoading(false); }
     };
 
+    if (!isOpen) return null;
+
     return (
-        <div className="fixed inset-0 bg-black/60 z-50 flex justify-center items-center backdrop-blur-sm p-4">
-            {/* Modal Container with Rounded Corners & Shadow */}
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[95vh]">
                 
-                {/* HEADER: Biru Solid sesuai Gambar */}
-                <div className="bg-[#0077AF] px-6 py-4 flex justify-between items-center relative">
-                    <h2 className="text-xl font-bold text-white text-center w-full">
-                        {isEditMode ? "Edit Data Murid" : "Tambah Murid Baru"}
+                {/* Header Biru Solid */}
+                <div className="bg-[#0077AF] px-6 py-5 flex justify-between items-center relative">
+                    <h2 className="text-white text-xl font-bold mx-auto">
+                        {editingStudent ? 'Edit Data Murid' : 'Tambah Murid Baru'}
                     </h2>
-                    {/* Tombol Close Absolute di kanan atas */}
-                    <button 
-                        onClick={onClose} 
-                        className="absolute right-4 text-white hover:text-gray-200 transition"
-                    >
+                    <button onClick={onClose} className="text-white absolute right-6 hover:text-gray-200">
                         <X size={24} />
                     </button>
                 </div>
-                
-                <div className="p-6 overflow-y-auto custom-scrollbar">
+
+                <div className="p-8 overflow-y-auto custom-scrollbar">
                     <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-                        {error && (
-                            <div className="bg-red-50 text-red-600 px-4 py-2 rounded-lg text-sm border border-red-200">
-                                {error}
-                            </div>
-                        )}
+                        
+                        {/* Nama Lengkap */}
+                        <PillInput 
+                            label="Nama Lengkap *" value={formData.name} 
+                            onChange={(e:any) => setFormData({...formData, name: e.target.value})} 
+                        />
 
-                        {/* Nama Lengkap (Full Width) */}
-                        <div>
-                            <Input 
-                                label="Nama Lengkap *" 
-                                name="name" 
-                                type="text" 
-                                value={formData.name} 
-                                onChange={handleChange} 
-                                placeholder=""
-                                // Style tambahan untuk membuat input bulat (pill shape) sesuai gambar
-                                className="rounded-2xl border-gray-300 focus:border-[#0077AF] focus:ring-[#0077AF]"
-                            />
-                        </div>
-
-                        {/* Grid: No HP & Usia (Side by Side) */}
+                        {/* Grid: No HP & Usia */}
                         <div className="grid grid-cols-2 gap-4">
-                            <Input 
-                                label="No HP *" 
-                                name="phone_number" 
-                                type="text" 
-                                value={formData.phone_number} 
-                                onChange={handleChange}
-                                placeholder="08......"
-                                className="rounded-2xl"
+                            <PillInput 
+                                label="No HP *" placeholder="08..." value={formData.phone_number}
+                                onChange={(e:any) => setFormData({...formData, phone_number: e.target.value})} 
                             />
-                            <Input 
-                                label="Usia *" 
-                                name="age" 
-                                type="number" 
-                                value={formData.age.toString()} 
-                                onChange={handleChange}
-                                placeholder=""
-                                className="rounded-2xl"
+                            <PillInput 
+                                label="Usia *" type="number" value={formData.age}
+                                onChange={(e:any) => setFormData({...formData, age: e.target.value})} 
                             />
                         </div>
 
-                        {/* Alamat (Full Width) */}
-                        <div>
-                            <Input 
-                                label="Alamat *" 
-                                name="address" 
-                                type="text" 
-                                value={formData.address} 
-                                onChange={handleChange}
-                                className="rounded-2xl"
-                            />
-                        </div>
+                        {/* Alamat */}
+                        <PillInput 
+                            label="Alamat *" value={formData.address}
+                            onChange={(e:any) => setFormData({...formData, address: e.target.value})} 
+                        />
 
-                        {/* Grid: Nama Ortu & No HP Ortu (Side by Side - SESUAI GAMBAR) */}
+                        {/* Grid: Nama Ortu & HP Ortu */}
                         <div className="grid grid-cols-2 gap-4">
-                            <Input 
-                                label="Nama Ortu *" 
-                                name="parent_name" 
-                                type="text" 
-                                value={formData.parent_name} 
-                                onChange={handleChange}
-                                className="rounded-2xl"
+                            <PillInput 
+                                label="Nama Ortu *" value={formData.parent_name}
+                                onChange={(e:any) => setFormData({...formData, parent_name: e.target.value})} 
                             />
-                            <Input 
-                                label="No HP (Ortu) *" 
-                                name="parent_phone" 
-                                type="text" 
-                                value={formData.parent_phone} 
-                                onChange={handleChange}
-                                placeholder="08......"
-                                className="rounded-2xl"
+                            <PillInput 
+                                label="No HP *" placeholder="08..." value={formData.parent_phone}
+                                onChange={(e:any) => setFormData({...formData, parent_phone: e.target.value})} 
                             />
                         </div>
 
-                        {/* Status (Full Width Dropdown) */}
-                        <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-1 ml-1">Status *</label>
+                        {/* Status Select */}
+                        <div className="flex flex-col gap-2">
+                            <label className="text-sm font-semibold text-gray-700 ml-1">Status *</label>
                             <div className="relative">
-                                <select
-                                    name="status"
+                                <select 
+                                    className="w-full border border-gray-400 rounded-full px-5 py-2.5 focus:outline-none appearance-none bg-white text-sm"
                                     value={formData.status}
-                                    onChange={handleChange}
-                                    className="w-full border border-gray-400 p-3 rounded-2xl bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#0077AF] appearance-none"
+                                    onChange={(e) => setFormData({...formData, status: e.target.value})}
                                 >
                                     <option value="AKTIF">Aktif</option>
                                     <option value="NON-AKTIF">Non-Aktif</option>
                                 </select>
-                                {/* Custom Arrow Icon Position */}
-                                <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-gray-500">
-                                    <svg className="w-4 h-4 fill-current" viewBox="0 0 20 20">
-                                        <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/>
-                                    </svg>
+                                <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none">
+                                    <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
                                 </div>
                             </div>
                         </div>
 
-                        {/* FOOTER BUTTONS */}
-                        <div className="mt-8 flex justify-center space-x-4">
-                            {/* Tombol Batal: Putih, Shadow, Rounded Pill */}
-                            <button 
-                                type="button" 
-                                onClick={onClose} 
-                                className="px-8 py-3 rounded-full border border-gray-200 shadow-sm text-gray-700 font-semibold hover:bg-gray-50 transition"
-                            >
+                        {/* Footer Buttons */}
+                        <div className="flex justify-center gap-4 mt-6">
+                            <button type="button" onClick={onClose} className="px-8 py-3 rounded-full border border-gray-300 text-gray-700 font-bold shadow-sm hover:bg-gray-50 transition">
                                 Batal
                             </button>
-                            
-                            {/* Tombol Tambah: Biru Tua, Icon Plus, Rounded Pill */}
-                            <button 
-                                type="submit" 
-                                disabled={loading} 
-                                className="flex items-center px-6 py-3 rounded-full bg-[#004A77] text-white font-semibold shadow-md hover:bg-[#00385a] transition disabled:opacity-70"
-                            >
-                                <Plus size={20} className="mr-2" />
-                                {loading ? 'Menyimpan...' : (isEditMode ? 'Simpan Data' : 'Tambah Murid')}
+                            <button type="submit" disabled={loading} className="px-6 py-3 rounded-full bg-[#00558F] text-white font-bold shadow-md hover:bg-[#004475] flex items-center transition disabled:opacity-70">
+                                <Plus size={20} className="mr-2" /> {loading ? 'Menyimpan...' : 'Tambah Murid'}
                             </button>
                         </div>
                     </form>
