@@ -12,12 +12,12 @@ interface MuridFormModalProps {
     editingStudent: Student | null; 
 }
 
-// Helper Input Component untuk style "Pill" (rounded-full)
+// Helper Input Component (Style Pill)
 const PillInput = ({ label, ...props }: any) => (
     <div className="flex flex-col gap-2">
         <label className="text-sm font-semibold text-gray-700 ml-1">{label}</label>
         <input 
-            className="border border-gray-400 rounded-full px-5 py-2.5 focus:outline-none focus:border-[#0077AF] focus:ring-1 focus:ring-[#0077AF] text-sm"
+            className="border border-gray-400 rounded-full px-5 py-2.5 focus:outline-none focus:border-[#0077AF] focus:ring-1 focus:ring-[#0077AF] text-sm w-full"
             {...props}
         />
     </div>
@@ -25,11 +25,13 @@ const PillInput = ({ label, ...props }: any) => (
 
 const MuridFormModal: React.FC<MuridFormModalProps> = ({ isOpen, onClose, onSuccess, editingStudent }) => {
     
-    // State Form
     const [formData, setFormData] = useState({
         name: '', age: '', phone_number: '', address: '', parent_name: '', parent_phone: '', status: 'AKTIF'
     });
     const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    const isEditMode = !!editingStudent;
 
     useEffect(() => {
         if (editingStudent) {
@@ -45,19 +47,36 @@ const MuridFormModal: React.FC<MuridFormModalProps> = ({ isOpen, onClose, onSucc
         } else {
             setFormData({ name: '', age: '', phone_number: '', address: '', parent_name: '', parent_phone: '', status: 'AKTIF' });
         }
+        setError(null);
     }, [editingStudent, isOpen]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
+        setError(null);
+
+        // Validasi Sederhana
+        if (!formData.name || !formData.phone_number) {
+             setError("Nama dan Nomor HP wajib diisi.");
+             setLoading(false);
+             return;
+        }
+
         try {
-            const payload = { ...formData, age: Number(formData.age) };
-            if (editingStudent?.id) await updateStudent(editingStudent.id, payload);
-            else await createStudent(payload);
-            onSuccess(); onClose();
-        } catch (error) {
-            alert('Gagal menyimpan data');
-        } finally { setLoading(false); }
+            const payload = { ...formData, age: Number(formData.age) || 0 };
+            
+            if (isEditMode && editingStudent?.id) {
+                await updateStudent(editingStudent.id, payload);
+            } else {
+                await createStudent(payload);
+            }
+            onSuccess(); 
+            onClose();
+        } catch (err: any) {
+            setError(err.message || 'Gagal menyimpan data.');
+        } finally { 
+            setLoading(false); 
+        }
     };
 
     if (!isOpen) return null;
@@ -69,9 +88,9 @@ const MuridFormModal: React.FC<MuridFormModalProps> = ({ isOpen, onClose, onSucc
                 {/* Header Biru Solid */}
                 <div className="bg-[#0077AF] px-6 py-5 flex justify-between items-center relative">
                     <h2 className="text-white text-xl font-bold mx-auto">
-                        {editingStudent ? 'Edit Data Murid' : 'Tambah Murid Baru'}
+                        {isEditMode ? 'Edit Data Murid' : 'Tambah Murid Baru'}
                     </h2>
-                    <button onClick={onClose} className="text-white absolute right-6 hover:text-gray-200">
+                    <button onClick={onClose} className="text-white absolute right-6 hover:text-gray-200 transition">
                         <X size={24} />
                     </button>
                 </div>
@@ -79,13 +98,17 @@ const MuridFormModal: React.FC<MuridFormModalProps> = ({ isOpen, onClose, onSucc
                 <div className="p-8 overflow-y-auto custom-scrollbar">
                     <form onSubmit={handleSubmit} className="flex flex-col gap-5">
                         
-                        {/* Nama Lengkap */}
+                        {error && (
+                            <div className="bg-red-50 text-red-600 px-4 py-2 rounded-lg text-sm border border-red-200 text-center">
+                                {error}
+                            </div>
+                        )}
+
                         <PillInput 
                             label="Nama Lengkap *" value={formData.name} 
                             onChange={(e:any) => setFormData({...formData, name: e.target.value})} 
                         />
 
-                        {/* Grid: No HP & Usia */}
                         <div className="grid grid-cols-2 gap-4">
                             <PillInput 
                                 label="No HP *" placeholder="08..." value={formData.phone_number}
@@ -97,20 +120,18 @@ const MuridFormModal: React.FC<MuridFormModalProps> = ({ isOpen, onClose, onSucc
                             />
                         </div>
 
-                        {/* Alamat */}
                         <PillInput 
                             label="Alamat *" value={formData.address}
                             onChange={(e:any) => setFormData({...formData, address: e.target.value})} 
                         />
 
-                        {/* Grid: Nama Ortu & HP Ortu */}
                         <div className="grid grid-cols-2 gap-4">
                             <PillInput 
                                 label="Nama Ortu *" value={formData.parent_name}
                                 onChange={(e:any) => setFormData({...formData, parent_name: e.target.value})} 
                             />
                             <PillInput 
-                                label="No HP *" placeholder="08..." value={formData.parent_phone}
+                                label="No HP (Ortu) *" placeholder="08..." value={formData.parent_phone}
                                 onChange={(e:any) => setFormData({...formData, parent_phone: e.target.value})} 
                             />
                         </div>
@@ -120,7 +141,7 @@ const MuridFormModal: React.FC<MuridFormModalProps> = ({ isOpen, onClose, onSucc
                             <label className="text-sm font-semibold text-gray-700 ml-1">Status *</label>
                             <div className="relative">
                                 <select 
-                                    className="w-full border border-gray-400 rounded-full px-5 py-2.5 focus:outline-none appearance-none bg-white text-sm"
+                                    className="w-full border border-gray-400 rounded-full px-5 py-2.5 focus:outline-none appearance-none bg-white text-sm cursor-pointer hover:border-[#0077AF]"
                                     value={formData.status}
                                     onChange={(e) => setFormData({...formData, status: e.target.value})}
                                 >
@@ -139,7 +160,7 @@ const MuridFormModal: React.FC<MuridFormModalProps> = ({ isOpen, onClose, onSucc
                                 Batal
                             </button>
                             <button type="submit" disabled={loading} className="px-6 py-3 rounded-full bg-[#00558F] text-white font-bold shadow-md hover:bg-[#004475] flex items-center transition disabled:opacity-70">
-                                <Plus size={20} className="mr-2" /> {loading ? 'Menyimpan...' : 'Tambah Murid'}
+                                <Plus size={20} className="mr-2" /> {loading ? 'Menyimpan...' : (isEditMode ? 'Simpan Data' : 'Tambah Murid')}
                             </button>
                         </div>
                     </form>

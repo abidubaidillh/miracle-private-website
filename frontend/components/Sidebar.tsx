@@ -20,12 +20,16 @@ import {
     LogOut 
 } from 'lucide-react'
 
-// SESUAIKAN HREF DENGAN HASIL TREE FOLDER ANDA
+// Interface Props untuk menerima fungsi logout dari layout
+interface SidebarProps {
+    logout?: () => void;
+}
+
 const menuItems = [
     { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
     { label: 'Murid', href: '/murid', icon: Users },
     { label: 'Mentor', href: '/mentor', icon: UserCog },
-    { label: 'Jadwal Kelas', href: '/jadwal', icon: Calendar }, // Sesuai folder "jadwal"
+    { label: 'Jadwal Kelas', href: '/jadwal', icon: Calendar }, // Sesuaikan folder: jadwal
     { label: 'Absensi', href: '/absensi', icon: CheckSquare },
     { label: 'Paket Kelas', href: '/paket-kelas', icon: Package },
     { label: 'Pembayaran', href: '/pembayaran', icon: CreditCard },
@@ -35,7 +39,7 @@ const menuItems = [
     { label: 'Laporan', href: '/laporan', icon: FileText },
 ]
 
-export default function Sidebar() {
+export default function Sidebar({ logout }: SidebarProps) {
     const pathname = usePathname()
 
     return (
@@ -83,6 +87,7 @@ export default function Sidebar() {
             {/* Logout Button */}
             <div className="p-4 mt-auto mb-4">
                 <button
+                    onClick={logout} // Panggil fungsi logout dari props
                     className="w-full flex items-center justify-center px-4 py-3 bg-transparent border border-white/40 hover:bg-white/10 text-white rounded-lg transition-all text-sm font-medium"
                 >
                     <LogOut size={18} className="mr-2" /> Logout
