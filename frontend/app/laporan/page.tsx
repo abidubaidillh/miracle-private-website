@@ -1,8 +1,24 @@
-export default function LaporanPage(){
+"use client"
+
+import React from 'react'
+import DashboardLayout from '@/components/DashboardLayout'
+
+export default function LaporanPage() {
   return (
-    <main>
-      <h1 className="text-2xl font-bold">Laporan</h1>
-      <p className="mt-2 text-sm text-gray-600">Halaman laporan (kosong)</p>
-    </main>
+    <DashboardLayout>
+      <div className="p-8">
+        <h1
+          className="text-white font-normal mb-8"
+          style={{
+            fontFamily: 'Inter',
+            fontSize: '24px',
+            fontWeight: 400,
+          }}
+        >
+          Laporan
+        </h1>
+        <p className="text-gray-600">Halaman laporan (kosong)</p>
+      </div>
+    </DashboardLayout>
   )
 }

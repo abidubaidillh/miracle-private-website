@@ -2,10 +2,8 @@
 
 import React from 'react'
 import DashboardLayout from '@/components/DashboardLayout'
-import Button from '@/components/Button'
-import Card from '@/components/Card'
 
-export default function DashboardPage() {
+export default function GajiMentorPage() {
   return (
     <DashboardLayout>
       <div className="p-8">
@@ -17,12 +15,9 @@ export default function DashboardPage() {
             fontWeight: 400,
           }}
         >
-          Dashboard
+          Gaji Mentor
         </h1>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Card title="Ringkasan">Ini adalah card contoh.</Card>
-          <Card title="Statistik">Card kedua contoh.</Card>
-        </div>
+        <p className="text-gray-600">Halaman gaji mentor (kosong)</p>
       </div>
     </DashboardLayout>
   )

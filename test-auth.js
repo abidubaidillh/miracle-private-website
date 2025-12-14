@@ -36,13 +36,20 @@ async function testRole(role) {
   console.log(`\n========== Testing Role: ${role} ==========`)
   const email = `test_${role.toLowerCase()}_${Date.now()}@example.com`
   const password = 'password123'
+  const username = `user_${role.toLowerCase()}_${Date.now()}`
+  const phone_number = '081234567890'
+  const birthday = '1990-01-01'
 
   // 1. REGISTER
   console.log(`\n1. REGISTER with role=${role}`)
+  // Intentionally include a `role` field to verify backend ignores it and forces MENTOR
   const regRes = await request('POST', '/api/auth/register', {
+    username,
     email,
     password,
-    role
+    phone_number,
+    birthday,
+    role, // should be ignored by backend
   })
   console.log(`   Status: ${regRes.status}`)
   console.log(`   Response:`, JSON.stringify(regRes.data, null, 2))
@@ -54,11 +61,12 @@ async function testRole(role) {
 
   const registeredRole = regRes.data?.user?.role
   console.log(`   Registered role: ${registeredRole}`)
-  if (registeredRole !== role) {
-    console.error(`   ❌ FAILED: Expected role=${role}, got ${registeredRole}`)
+  // Backend must force new users to MENTOR
+  if (registeredRole !== 'MENTOR') {
+    console.error(`   ❌ FAILED: Expected role=MENTOR, got ${registeredRole}`)
     return false
   }
-  console.log(`   ✓ Role stored correctly as UPPERCASE: ${registeredRole}`)
+  console.log(`   ✓ Role stored correctly as UPPERCASE and forced to MENTOR`)
 
   // 2. LOGIN
   console.log(`\n2. LOGIN with same credentials`)
@@ -78,8 +86,8 @@ async function testRole(role) {
   console.log(`   Logged-in role: ${loginedRole}`)
   console.log(`   Session token: ${session ? 'Present' : 'Missing'}`)
 
-  if (loginedRole !== role) {
-    console.error(`   ❌ FAILED: Expected role=${role}, got ${loginedRole}`)
+  if (loginedRole !== 'MENTOR') {
+    console.error(`   ❌ FAILED: Expected role=MENTOR, got ${loginedRole}`)
     return false
   }
   if (!session) {

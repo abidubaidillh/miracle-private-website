@@ -1,8 +1,24 @@
-export default function AbsensiPage(){
+"use client"
+
+import React from 'react'
+import DashboardLayout from '@/components/DashboardLayout'
+
+export default function AbsensiPage() {
   return (
-    <main>
-      <h1 className="text-2xl font-bold">Absensi</h1>
-      <p className="mt-2 text-sm text-gray-600">Halaman absensi (kosong)</p>
-    </main>
+    <DashboardLayout>
+      <div className="p-8">
+        <h1
+          className="text-white font-normal mb-8"
+          style={{
+            fontFamily: 'Inter',
+            fontSize: '24px',
+            fontWeight: 400,
+          }}
+        >
+          Absensi
+        </h1>
+        <p className="text-gray-600">Halaman absensi (kosong)</p>
+      </div>
+    </DashboardLayout>
   )
 }
