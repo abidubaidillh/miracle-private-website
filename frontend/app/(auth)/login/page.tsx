@@ -1,14 +1,18 @@
+// frontend/app/(auth)/login/page.tsx
 "use client"
 
 import React, { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { saveAuth } from '../../../lib/auth'
 import Input from '../../../components/Input'
 import Button from '../../../components/Button'
+// IMPORT CONTEXT
+import { useUser } from '@/context/UserContext'; 
+
+// HAPUS import { saveAuth } from '../../../lib/auth' karena sudah ditangani Context
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'
 
-function roleToPath(role) {
+function roleToPath(role: string) {
   if (!role) return '/login'
   const r = role.toUpperCase()
   if (r === 'OWNER' || r === 'ADMIN') return '/dashboard'
@@ -19,13 +23,19 @@ function roleToPath(role) {
 
 export default function Page() {
   const router = useRouter()
+  // AMBIL FUNGSI LOGIN DARI CONTEXT
+  const { login } = useUser(); 
+
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState(null)
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
 
-  async function handleSubmit(e) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
+    setLoading(true)
+
     try {
       const res = await fetch(`${API}/api/auth/login`, {
         method: 'POST',
@@ -33,12 +43,20 @@ export default function Page() {
         body: JSON.stringify({ email, password }),
       })
       const data = await res.json()
+      
       if (!res.ok) throw new Error(data?.error || 'Login failed')
 
-      saveAuth({ user: data.user, session: data.session })
+      // KRITIS: Gunakan fungsi login dari Context, BUKAN saveAuth manual
+      // Ini akan menyimpan token DAN mengupdate state aplikasi secara instan
+      login({ user: data.user, session: data.session });
+
+      // Redirect sesuai role
       router.push(roleToPath(data.user.role))
-    } catch (err) {
+      
+    } catch (err: any) {
       setError(err.message || String(err))
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -54,7 +72,7 @@ export default function Page() {
               <Input
                 ariaLabel="username or email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e: any) => setEmail(e.target.value)}
                 placeholder="Username or email"
               />
             </div>
@@ -67,24 +85,18 @@ export default function Page() {
                 ariaLabel="password"
                 type="password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e: any) => setPassword(e.target.value)}
                 placeholder="Password"
               />
             </div>
           </div>
 
-          <div className="flex items-center justify-between mt-2">
-            <label className="flex items-center gap-2 small-muted">
-              <input type="checkbox" className="rounded border-white/30" />
-              <span className="muted-text">Remember me</span>
-            </label>
-            <a className="small-muted hover:underline" href="#">Forgot?</a>
-          </div>
-
-          {error && <div className="text-red-300">{error}</div>}
+          {error && <div className="text-red-300 text-sm text-center bg-red-900/20 p-2 rounded">{error}</div>}
 
           <div className="flex justify-center mt-4">
-            <Button type="submit">Login</Button>
+            <Button type="submit" disabled={loading}>
+              {loading ? 'Loading...' : 'Login'}
+            </Button>
           </div>
 
           <div className="text-center mt-3 small-muted">
@@ -95,4 +107,4 @@ export default function Page() {
       </div>
     </div>
   )
-}
+} 
