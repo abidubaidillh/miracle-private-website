@@ -185,5 +185,19 @@ async function registerInternal(req, res) {
 }
 // --- AKHIR FUNGSI BARU ---
 
+// --- ✅ TAMBAHAN: FUNGSI LOGOUT ---
+async function logout(req, res) {
+    try {
+        // Jika Anda menggunakan HTTP-only cookie di masa depan, baris ini berguna.
+        // Saat ini frontend menggunakan document.cookie, tapi endpoint ini tetap penting
+        // untuk memberi sinyal ke server (misal: invalidasi session Supabase).
+        
+        res.clearCookie('token'); // Bersihkan cookie server-side jika ada
+        return res.status(200).json({ message: 'Logout berhasil di sisi server' });
+    } catch (err) {
+        console.error("Logout Error:", err);
+        return res.status(500).json({ message: 'Gagal logout' });
+    }
+}
 
-module.exports = { register, login, me, registerInternal } // <-- EXPORT BARU
+module.exports = { register, login, me, registerInternal, logout } // <-- EXPORT BARU

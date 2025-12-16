@@ -7,26 +7,30 @@ require('dotenv').config() // Memuat .env di awal
 const app = express()
 const cookieParser = require('cookie-parser')
 
+// ==========================================================
 // Import Routes
+// ==========================================================
 const authRoutes = require('./routes/auth.routes')
 const muridRoutes = require('./routes/murid.routes')
+const mentorRoutes = require('./routes/mentor.routes') 
+const paketRoutes = require('./routes/paket.routes') // ✅ SUDAH BENAR
 
-// --- Middleware Utama ---
+// ==========================================================
+// Middleware Utama
+// ==========================================================
 app.use(cors({ 
-    // Ganti dengan domain frontend Anda saat deploy:
-    origin: process.env.CLIENT_URL || 'http://localhost:3000', 
+    origin: process.env.CLIENT_URL || 'http://localhost:3000',
     credentials: true 
 }))
 
-// ==========================================================
-// 🚨 PERBAIKAN KRITIS: Middleware untuk mem-parse body JSON
-// ==========================================================
-app.use(express.json()) 
-// ==========================================================
+// 🚨 WAJIB agar req.body tidak undefined
+app.use(express.json())
 
-app.use(cookieParser()) // Untuk parsing cookie
+app.use(cookieParser())
 
-// --- Health Check & Root Route ---
+// ==========================================================
+// Health Check & Root
+// ==========================================================
 app.get('/api/health', (req, res) => {
     res.json({ 
         status: 'ok', 
@@ -39,48 +43,67 @@ app.get('/', (req, res) => {
     res.send('Miracle Private Class Backend — API is running. See /api/health')
 })
 
-// --- Mount Routes Sebenarnya ---
+// ==========================================================
+// Mount Routes (SAMA POLA DENGAN MURID)
+// ==========================================================
 
-// 1. Auth Routes
+// 1. Auth
 try {
     app.use('/api/auth', authRoutes)
-    console.log('✅ Auth Routes mounted at /api/auth');
+    console.log('✅ Auth Routes mounted at /api/auth')
 } catch (e) {
-    console.warn('⚠️ Warning: auth.routes not found or failed to load. Authentication endpoints skipped.');
+    console.warn('⚠️ auth.routes gagal dimuat:', e.message)
 }
 
-// 2. Murid/Students Routes
+// 2. Murid / Students
 try {
-    // Menggunakan /api/students sesuai dengan convention
-    app.use('/api/students', muridRoutes); 
-    console.log('✅ Murid Routes mounted at /api/students');
+    app.use('/api/students', muridRoutes)
+    console.log('✅ Murid Routes mounted at /api/students')
 } catch (e) {
-    console.error("❌ Failed to mount muridRoutes:", e.message);
+    console.error('❌ Failed to mount muridRoutes:', e.message)
 }
 
-// --- Penanganan Error Middleware (PENTING) ---
+// 3. Mentor
+try {
+    app.use('/api/mentors', mentorRoutes)
+    console.log('✅ Mentor Routes mounted at /api/mentors')
+} catch (e) {
+    console.error('❌ Failed to mount mentorRoutes:', e.message)
+}
 
-// 1. 404 Handler (Runs if no route above has matched)
+// 4. Paket Kelas (✅ TAMBAHAN INI YANG SEBELUMNYA KURANG)
+try {
+    app.use('/api/packages', paketRoutes)
+    console.log('✅ Paket Routes mounted at /api/packages')
+} catch (e) {
+    console.error('❌ Failed to mount paketRoutes:', e.message)
+}
+
+// ==========================================================
+// Error Handling Middleware (JANGAN DIPINDAH)
+// ==========================================================
+
+// 404 Handler
 app.use((req, res, next) => {
-    const error = new Error(`Not Found - ${req.originalUrl}`);
-    res.status(404);
-    next(error);
-});
+    const error = new Error(`Not Found - ${req.originalUrl}`)
+    res.status(404)
+    next(error)
+})
 
-// 2. Global Error Handler (Handles errors passed by next(error) or thrown)
+// Global Error Handler
 app.use((error, req, res, next) => {
-    // Jika status masih 200, ubah ke 500
-    const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
-    res.status(statusCode);
+    const statusCode = res.statusCode === 200 ? 500 : res.statusCode
+    res.status(statusCode)
     res.json({
         message: error.message,
         stack: process.env.NODE_ENV === 'production' ? '🥞' : error.stack,
-    });
-});
+    })
+})
 
-
-// --- Server Listener ---
+// ==========================================================
+// Server Listener
+// ==========================================================
 const port = process.env.PORT || 4000
 app.listen(port, () => {
-    console.log(`🚀 Server is listening on port ${port} (http://localhost:${port})`);
+    console.log(`🚀 Server running at http://localhost:${port}`)
 })

@@ -50,8 +50,32 @@ export function saveAuth(authObj: AuthObject) {
   document.cookie = `auth=${encodeURIComponent(JSON.stringify(authObj))}; path=/; max-age=86400; SameSite=Lax` 
 }
 
+// ✅ FUNGSI PEMBERSIH COOKIE (TETAP SAMA, TAPI PENTING)
 export function clearAuth() {
-  if (typeof document === 'undefined') return
-  // Atur max-age ke 0 untuk menghapus cookie
-  document.cookie = `auth=; path=/; max-age=0; SameSite=Lax`
+  if (typeof document === 'undefined') return
+  document.cookie = `auth=; path=/; max-age=0; SameSite=Lax`
+}
+
+// --- ✅ TAMBAHAN: FUNGSI API LOGOUT ---
+// Ganti URL port sesuai backend Anda (default 4000)
+const API_BASE_URL = 'http://localhost:4000/api/auth'; 
+
+export async function logoutUser() {
+    try {
+        // 1. Panggil server untuk logout (opsional tapi best practice)
+        await fetch(`${API_BASE_URL}/logout`, {
+            method: 'POST',
+            // credentials: 'include', // Aktifkan jika nanti pakai HttpOnly cookie
+        });
+
+        // 2. Hapus cookie di browser (Client side)
+        clearAuth(); 
+
+        return true;
+    } catch (error) {
+        console.error("Logout Error:", error);
+        // Tetap hapus cookie client side meski server error agar user bisa keluar
+        clearAuth();
+        return false;
+    }
 }

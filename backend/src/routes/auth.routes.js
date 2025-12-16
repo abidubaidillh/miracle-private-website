@@ -13,4 +13,7 @@ router.get('/me', authMiddleware, controller.me)
 // Route ini digunakan untuk membuat akun dengan role tinggi
 router.post('/register-internal', controller.registerInternal) 
 
+// --- ✅ TAMBAHAN: ROUTE LOGOUT ---
+router.post('/logout', controller.logout)
+
 module.exports = router

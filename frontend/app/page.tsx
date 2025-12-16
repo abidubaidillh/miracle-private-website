@@ -1,8 +1,9 @@
+import { redirect } from 'next/navigation'
+
 export default function Home() {
-  return (
-    <main>
-      <h1 className="text-2xl font-semibold">Miracle Admin — Frontend</h1>
-      <p className="mt-2 text-sm text-gray-600">Use the routes: /dashboard, /murid, /mentor, /jadwal, /absensi, /pembayaran, /keuangan, /laporan</p>
-    </main>
-  )
+  // Secara default, paksa redirect ke login.
+  // Middleware akan menangkap request ini sebelum render:
+  // 1. Jika user sudah login -> Middleware membelokkan ke /dashboard
+  // 2. Jika user belum login -> Middleware membiarkan redirect ini atau mengarahkannya sendiri ke /login
+  redirect('/login')
 }

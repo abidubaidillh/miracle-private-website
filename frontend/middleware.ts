@@ -5,68 +5,125 @@ export function middleware(req: NextRequest) {
   const url = req.nextUrl.clone()
   const pathname = req.nextUrl.pathname
 
-  const publicPaths = ['/login', '/register', '/api', '/_next', '/favicon.ico', '/assets']
-  if (publicPaths.some(p => pathname.startsWith(p))) return NextResponse.next()
+  // 1. Dapatkan Cookie Auth
+  const authCookie = req.cookies.get('auth')?.value
 
-  const cookie = req.cookies.get('auth')?.value
-  if (!cookie) {
-    url.pathname = '/login'
-    return NextResponse.redirect(url)
-  }
+  // 2. Tentukan apakah ini halaman publik (Login/Register)
+  const isPublicPage = pathname === '/login' || pathname === '/register'
 
-  let auth = null
-  try {
-    auth = JSON.parse(decodeURIComponent(cookie))
-  } catch (e) {
-    url.pathname = '/login'
-    return NextResponse.redirect(url)
-  }
+  // --- LOGIKA REDIRECT ---
 
-  // Ensure role is UPPERCASE for consistent comparison
-  const role = (auth?.user?.role || '').toUpperCase().trim()
-  
-  // Role-to-path mapping (single source of truth)
-  function getRoleDefaultPath(userRole: string): string {
-    if (userRole === 'OWNER' || userRole === 'ADMIN') return '/dashboard'
-    if (userRole === 'BENDAHARA') return '/keuangan'
-    if (userRole === 'MENTOR') return '/jadwal'
-    return '/login'
-  }
-
-  // Root path: redirect to role's default page
+  // KASUS A: User mengakses Root ('/')
+  // Middleware akan menentukan dia harus ke mana
   if (pathname === '/') {
-    url.pathname = getRoleDefaultPath(role)
+    if (authCookie) {
+      try {
+        const auth = JSON.parse(decodeURIComponent(authCookie))
+        const role = (auth?.user?.role || '').toUpperCase()
+        url.pathname = getRoleDefaultPath(role)
+        return NextResponse.redirect(url)
+      } catch (e) {
+        // Cookie rusak, hapus dan ke login
+        url.pathname = '/login'
+        const response = NextResponse.redirect(url)
+        response.cookies.delete('auth')
+        return response
+      }
+    } else {
+      url.pathname = '/login'
+      return NextResponse.redirect(url)
+    }
+  }
+
+  // KASUS B: User SUDAH Login, tapi mencoba buka halaman Login/Register
+  // Lempar balik ke Dashboard/Halaman Default mereka
+  if (authCookie && isPublicPage) {
+    try {
+      const auth = JSON.parse(decodeURIComponent(authCookie))
+      const role = (auth?.user?.role || '').toUpperCase()
+      url.pathname = getRoleDefaultPath(role)
+      return NextResponse.redirect(url)
+    } catch (e) {
+      // Ignore error, let them go to login if cookie is bad
+    }
+  }
+
+  // KASUS C: User BELUM Login, tapi mencoba buka halaman yang dilindungi
+  if (!authCookie && !isPublicPage) {
+    url.pathname = '/login'
     return NextResponse.redirect(url)
   }
 
-  // DASHBOARD: Only OWNER and ADMIN
-  if (pathname.startsWith('/dashboard')) {
-    if (role !== 'OWNER' && role !== 'ADMIN') {
-      url.pathname = getRoleDefaultPath(role)
-      return NextResponse.redirect(url)
+  // KASUS D: Validasi Hak Akses Role (RBAC)
+  // Hanya dijalankan jika user sudah login dan berada di halaman private
+  if (authCookie && !isPublicPage) {
+    try {
+      const auth = JSON.parse(decodeURIComponent(authCookie))
+      const role = (auth?.user?.role || '').toUpperCase()
+
+      // --- ATURAN HAK AKSES SESUAI REQUIREMENT ---
+
+      // 1. Keuangan, Gaji, Biaya Ops (Hanya Owner & Bendahara, Admin view only/partial)
+      // MENTOR DILARANG MASUK SINI
+      if (
+        pathname.startsWith('/keuangan') || 
+        pathname.startsWith('/gaji-mentor') || 
+        pathname.startsWith('/biaya-operasional') ||
+        pathname.startsWith('/pembayaran')
+      ) {
+        if (role === 'MENTOR') {
+          return NextResponse.redirect(new URL('/jadwal', req.url)) // Mentor dilempar ke Jadwal
+        }
+      }
+
+      // 2. Jadwal (Owner, Admin, Mentor)
+      // BENDAHARA DILARANG MASUK SINI (Sesuai tabel: Jadwal -> Bendahara ❌)
+      if (pathname.startsWith('/jadwal')) {
+        if (role === 'BENDAHARA') {
+          return NextResponse.redirect(new URL('/keuangan', req.url)) // Bendahara dilempar ke Keuangan
+        }
+      }
+
+      // 3. Paket Kelas & Murid (Owner, Admin, Bendahara view only)
+      // MENTOR DILARANG MASUK SINI
+      if (pathname.startsWith('/paket-kelas') || pathname.startsWith('/murid')) {
+        if (role === 'MENTOR') {
+          return NextResponse.redirect(new URL('/jadwal', req.url))
+        }
+      }
+
+    } catch (e) {
+      // Jika parsing gagal, anggap sesi tidak valid
+      url.pathname = '/login'
+      const response = NextResponse.redirect(url)
+      response.cookies.delete('auth')
+      return response
     }
   }
 
-  // KEUANGAN: BENDAHARA, OWNER, and ADMIN
-  if (pathname.startsWith('/keuangan')) {
-    if (role !== 'BENDAHARA' && role !== 'OWNER' && role !== 'ADMIN') {
-      url.pathname = getRoleDefaultPath(role)
-      return NextResponse.redirect(url)
-    }
-  }
-
-  // JADWAL: MENTOR, OWNER, and ADMIN
-  if (pathname.startsWith('/jadwal')) {
-    if (role !== 'MENTOR' && role !== 'OWNER' && role !== 'ADMIN') {
-      url.pathname = getRoleDefaultPath(role)
-      return NextResponse.redirect(url)
-    }
-  }
-
-  // Allow access if no redirect was needed
   return NextResponse.next()
 }
 
+// Helper: Menentukan halaman utama berdasarkan Role
+function getRoleDefaultPath(role: string): string {
+  switch (role) {
+    case 'OWNER':
+    case 'ADMIN':
+      return '/dashboard'
+    case 'BENDAHARA':
+      return '/keuangan' // Fokus utama bendahara
+    case 'MENTOR':
+      return '/jadwal'   // Fokus utama mentor
+    default:
+      return '/login'
+  }
+}
+
+// Konfigurasi Matcher:
+// Middleware TIDAK akan berjalan pada path yang cocok dengan regex ini.
+// Kita mengecualikan: api, _next/static, _next/image, favicon.ico, dan logo-lembaga.png
 export const config = {
-  matcher: ['/', '/dashboard/:path*', '/keuangan/:path*', '/jadwal/:path*', '/((?!_next|api|favicon.ico).*)'],
+  matcher: [
+    '/((?!api|_next/static|_next/image|favicon.ico|logo-lembaga.png|aset).*)',
+  ],
 }
