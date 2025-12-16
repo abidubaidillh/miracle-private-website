@@ -1,9 +1,10 @@
-// frontend/app/layout.tsx
 import './globals.css'
 import React from 'react'
-import { UserProvider } from '@/context/UserContext'; 
 import { Inter } from 'next/font/google' 
-import { LoadingProvider } from "@/context/LoadingContext" // ✅ 1. Import
+
+// ✅ Kita aktifkan kembali Providernya
+import { UserProvider } from '@/context/UserContext'; 
+import { LoadingProvider } from '@/context/LoadingContext';
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -17,7 +18,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="id">
       <body className={`${inter.className} min-h-screen bg-[#F8F9FA] text-gray-900 m-0 p-0`}>
         
-        {/* ✅ 2. Provider disusun bertingkat (Nesting) */}
+        {/* ✅ Pastikan susunan ini ada (jangan di-comment lagi) */}
         <UserProvider>
           <LoadingProvider>
              {children}

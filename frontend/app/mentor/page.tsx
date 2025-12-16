@@ -1,27 +1,15 @@
 "use client"
-
 import React, { useEffect, useState } from "react"
 import DashboardLayout from "@/components/DashboardLayout"
-import {
-  Search,
-  UserPlus,
-  Pencil,
-  Trash2,
-  Loader2,
-  Briefcase,
-} from "lucide-react"
+import { Search, Pencil, Trash2, Loader2, Briefcase } from "lucide-react" // ❌ Hapus import UserPlus
 import MentorFormModal from "@/components/MentorFormModal"
 import { getMentors, deleteMentor, Mentor } from "@/lib/mentorActions"
 import { getUserRole } from "@/lib/auth" 
 
 const StatPill = ({ icon: Icon, count, label, colorClass }: any) => (
-  <div
-    className={`flex items-center px-5 py-2 rounded-full text-white text-sm font-bold shadow-sm ${colorClass}`}
-  >
+  <div className={`flex items-center px-5 py-2 rounded-full text-white text-sm font-bold shadow-sm ${colorClass}`}>
     <Icon size={18} className="mr-2" />
-    <span>
-      {label}: {count}
-    </span>
+    <span>{label}: {count}</span>
   </div>
 )
 
@@ -34,44 +22,30 @@ export default function MentorPage() {
 
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingMentor, setEditingMentor] = useState<Mentor | null>(null)
-
   const [role, setRole] = useState<string | null>(null)
 
-  useEffect(() => {
-    const currentRole = getUserRole()
-    setRole(currentRole)
-  }, [])
+  useEffect(() => { setRole(getUserRole()) }, [])
 
   const fetchMentors = async () => {
     setLoading(true)
     try {
-      const result = await getMentors()
+      const result: any = await getMentors()
       const allMentors = result.mentors || []
-      
       const filtered = searchQuery
-        ? allMentors.filter(
-            (m: Mentor) =>
-              m.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-              m.phone_number.includes(searchQuery)
-          )
+        ? allMentors.filter((m: Mentor) => m.name.toLowerCase().includes(searchQuery.toLowerCase()) || m.phone_number.includes(searchQuery))
         : allMentors
-
       setMentorData(filtered)
+      
       if (result.stats) {
-          setActiveCount(result.stats.active || 0)
-          setInactiveCount(result.stats.inactive || 0)
+          setActiveCount(result.stats.active || 0); setInactiveCount(result.stats.inactive || 0)
+      } else if (typeof result.activeCount === 'number') {
+          setActiveCount(result.activeCount); setInactiveCount(result.inactiveCount)
       }
-    } catch (err) {
-      console.error("[MentorPage] Fetch error:", err)
-    } finally {
-      setLoading(false)
-    }
+    } catch (err) { console.error(err) } finally { setLoading(false) }
   }
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-        fetchMentors()
-    }, 500)
+    const timer = setTimeout(() => { fetchMentors() }, 500)
     return () => clearTimeout(timer)
   }, [searchQuery])
 
@@ -81,46 +55,24 @@ export default function MentorPage() {
     fetchMentors()
   }
 
-  const formatRupiah = (num: number) => {
-    return new Intl.NumberFormat("id-ID", {
-      style: "currency",
-      currency: "IDR",
-      minimumFractionDigits: 0,
-    }).format(num)
-  }
+  const formatRupiah = (num: number) => new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(num)
 
-  // --- LOGIKA HAK AKSES BARU ---
   const isOwner = role === "OWNER"
   const isAdmin = role === "ADMIN"
-  
-  // ✅ PERUBAHAN DI SINI: Admin juga boleh melihat (canView)
   const canViewSalary = isOwner || isAdmin 
-  
-  // Admin boleh edit data lain, tapi TIDAK boleh edit gaji (logic di Modal)
   const canEditInfo = isOwner || isAdmin 
 
   return (
     <DashboardLayout title="Data Mentor">
       <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
+        {/* Stats */}
         <div className="flex gap-4">
           <StatPill icon={Briefcase} label="Aktif" count={activeCount} colorClass="bg-[#5AB267]" />
           <StatPill icon={Briefcase} label="Non-Aktif" count={inactiveCount} colorClass="bg-[#FF0000]" />
         </div>
-
-        {canEditInfo && (
-          <button
-            onClick={() => {
-              setEditingMentor(null)
-              setIsModalOpen(true)
-            }}
-            className="flex items-center px-6 py-2.5 bg-[#00558F] text-white rounded-lg font-bold text-sm hover:bg-[#004475] transition shadow-md"
-          >
-            <UserPlus size={18} className="mr-2" />
-            Tambah Mentor
-          </button>
-        )}
       </div>
 
+      {/* Search Bar */}
       <div className="mb-6 w-full max-w-md">
         <div className="relative">
           <input
@@ -134,6 +86,7 @@ export default function MentorPage() {
         </div>
       </div>
 
+      {/* Tabel Data Mentor */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
             <table className="w-full text-left">
@@ -141,14 +94,11 @@ export default function MentorPage() {
                 <tr>
                 {["Nama", "No HP", "Bidang", "Status", canViewSalary ? "Gaji / Sesi" : "", canEditInfo ? "Aksi" : ""].map(
                     (h, i) => (
-                    h !== "" && <th key={i} className="px-6 py-4 text-sm font-bold whitespace-nowrap">
-                        {h}
-                    </th>
+                    h !== "" && <th key={i} className="px-6 py-4 text-sm font-bold whitespace-nowrap">{h}</th>
                     )
                 )}
                 </tr>
             </thead>
-
             <tbody className="divide-y divide-gray-100">
                 {loading ? (
                 <tr><td colSpan={6} className="p-12 text-center text-gray-500"><Loader2 className="animate-spin inline mr-2" />Memuat data...</td></tr>
@@ -160,32 +110,20 @@ export default function MentorPage() {
                     <td className="px-6 py-4 font-semibold text-gray-800">{m.name}</td>
                     <td className="px-6 py-4 text-gray-600">{m.phone_number}</td>
                     <td className="px-6 py-4 text-gray-600">
-                        <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs font-semibold border border-blue-100">
-                            {m.expertise || "-"}
-                        </span>
+                        <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs font-semibold border border-blue-100">{m.expertise || "-"}</span>
                     </td>
                     <td className="px-6 py-4">
-                        <span className={`px-3 py-1 rounded-full text-[11px] font-bold text-white ${m.status === "AKTIF" ? "bg-[#5AB267]" : "bg-[#FF0000]"}`}>
-                        {m.status}
-                        </span>
+                        <span className={`px-3 py-1 rounded-full text-[11px] font-bold text-white ${m.status === "AKTIF" ? "bg-[#5AB267]" : "bg-[#FF0000]"}`}>{m.status}</span>
                     </td>
-
-                    {/* ✅ LOGIKA BARU: Owner & Admin bisa melihat Gaji */}
                     {canViewSalary && (
                         <td className="px-6 py-4 font-mono text-sm">
-                            <span className="text-[#0077AF] font-bold">
-                                {formatRupiah(m.salary_per_session || 0)}
-                            </span>
+                            <span className="text-[#0077AF] font-bold">{formatRupiah(m.salary_per_session || 0)}</span>
                         </td>
                     )}
-
                     {canEditInfo && (
                         <td className="px-6 py-4 flex gap-3">
                         <button
-                            onClick={() => {
-                                setEditingMentor(m)
-                                setIsModalOpen(true)
-                            }}
+                            onClick={() => { setEditingMentor(m); setIsModalOpen(true) }}
                             className="text-yellow-600 hover:text-yellow-700 p-2 hover:bg-yellow-50 rounded transition"
                             title="Edit"
                         >

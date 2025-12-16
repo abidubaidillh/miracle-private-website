@@ -1,8 +1,8 @@
 "use client"
 
-import React, { useState, useEffect } from 'react'
+import React from 'react'
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 import Image from 'next/image'
 import { 
     LayoutDashboard, 
@@ -17,9 +17,11 @@ import {
     TrendingUp, 
     FileText, 
     LogOut,
-    UserPlus // ✅ Icon untuk Kelola User
+    UserPlus // Icon Kelola User
 } from 'lucide-react'
-import { logoutUser, getUserRole } from '@/lib/auth' // ✅ Import getUserRole
+
+// ✅ Gunakan Context, bukan helper auth manual
+import { useUser } from '@/context/UserContext'
 
 const menuItems = [
     { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -37,24 +39,18 @@ const menuItems = [
 
 export default function Sidebar() {
     const pathname = usePathname()
-    const router = useRouter()
-    const [role, setRole] = useState<string | null>(null)
-
-    // ✅ Ambil role saat komponen dimuat
-    useEffect(() => {
-        setRole(getUserRole())
-    }, [])
-
-    const handleLogout = async () => {
-        await logoutUser();
-        router.push('/login');
-    }
+    
+    // ✅ Ambil user & logout dari Context agar state sinkron
+    const { user, logout } = useUser()
+    const role = user?.role || 'GUEST'
 
     return (
-        <aside className="fixed left-0 top-0 h-screen w-64 flex flex-col z-20 bg-[#0077AF] text-white">
+        <aside className="fixed left-0 top-0 h-screen w-64 flex flex-col z-20 bg-[#0077AF] text-white transition-all duration-300 shadow-xl">
+            
             {/* Header Sidebar: LOGO */}
             <div className="flex flex-col items-center justify-center py-8 border-b border-[#006699]">
                 <div className="relative w-40 h-16"> 
+                    {/* Pastikan file logo ada di public/logo-lembaga.png */}
                     <Image
                         src="/logo-lembaga.png" 
                         alt="Miracle Private Class"
@@ -77,13 +73,18 @@ export default function Sidebar() {
                             <li key={item.href}>
                                 <Link
                                     href={item.href}
-                                    className={`flex items-center px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 ${
+                                    className={`flex items-center px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 group ${
                                         isActive 
                                             ? 'bg-white text-[#0077AF] font-bold shadow-md' 
                                             : 'text-gray-100 hover:bg-[#006699] hover:text-white'
                                     }`}
                                 >
-                                    <IconComponent size={20} className={`mr-3 ${isActive ? 'text-[#0077AF]' : 'text-gray-200 group-hover:text-white'}`} />
+                                    <IconComponent 
+                                        size={20} 
+                                        className={`mr-3 transition-colors ${
+                                            isActive ? 'text-[#0077AF]' : 'text-blue-200 group-hover:text-white'
+                                        }`} 
+                                    />
                                     {item.label}
                                 </Link>
                             </li>
@@ -93,19 +94,24 @@ export default function Sidebar() {
 
                 {/* ✅ MENU ADMIN AREA: Hanya untuk Owner & Admin */}
                 {(role === 'OWNER' || role === 'ADMIN') && (
-                    <div className="mt-6 pt-4 border-t border-[#006699]/50">
+                    <div className="mt-6 pt-4 border-t border-[#006699]/50 animate-fade-in">
                         <p className="px-4 text-xs font-bold text-blue-200 uppercase tracking-wider mb-2">
                             Admin Area
                         </p>
                         <Link
                             href="/kelola-user"
-                            className={`flex items-center px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 ${
+                            className={`flex items-center px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 group ${
                                 pathname.startsWith('/kelola-user')
                                     ? 'bg-white text-[#0077AF] font-bold shadow-md'
                                     : 'text-gray-100 hover:bg-[#006699] hover:text-white'
                             }`}
                         >
-                            <UserPlus size={20} className="mr-3" />
+                            <UserPlus 
+                                size={20} 
+                                className={`mr-3 transition-colors ${
+                                    pathname.startsWith('/kelola-user') ? 'text-[#0077AF]' : 'text-blue-200 group-hover:text-white'
+                                }`} 
+                            />
                             Kelola User
                         </Link>
                     </div>
@@ -113,10 +119,10 @@ export default function Sidebar() {
             </nav>
 
             {/* Logout Button */}
-            <div className="p-4 mt-auto border-t border-[#006699]">
+            <div className="p-4 mt-auto border-t border-[#006699] bg-[#00608c]">
                 <button
-                    onClick={handleLogout}
-                    className="w-full flex items-center justify-center px-4 py-3 bg-red-500/10 hover:bg-red-500 text-red-100 hover:text-white rounded-lg transition-all duration-200 text-sm font-bold"
+                    onClick={logout} // ✅ Panggil fungsi logout dari context
+                    className="w-full flex items-center justify-center px-4 py-3 bg-red-500/10 hover:bg-red-600 text-red-100 hover:text-white rounded-lg transition-all duration-200 text-sm font-bold border border-transparent hover:border-red-400"
                 >
                     <LogOut size={20} className="mr-2" /> Logout
                 </button>

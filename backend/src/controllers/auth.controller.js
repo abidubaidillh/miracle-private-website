@@ -11,10 +11,9 @@ async function register(req, res) {
             return res.status(400).json({ error: 'username, email, phone_number, birthday, password required' })
         }
 
-        const normalizedRole = 'MENTOR' // Default public registration is MENTOR
+        const normalizedRole = 'MENTOR' 
 
         let user = null
-        // Create user in Supabase Auth
         if (supabase.auth && supabase.auth.admin && typeof supabase.auth.admin.createUser === 'function') {
             const { data, error } = await supabase.auth.admin.createUser({ email, password, email_confirm: true })
             if (error) return res.status(400).json({ error: error.message || error })
@@ -27,7 +26,6 @@ async function register(req, res) {
 
         if (!user || !user.id) return res.status(500).json({ error: 'failed to create user' })
 
-        // Store in 'users' table
         try {
             await supabase.from('users').upsert({
                 id: user.id,
@@ -38,21 +36,21 @@ async function register(req, res) {
                 role: normalizedRole,
             })
             
-            // ✅ SINKRONISASI KE TABEL MENTORS (Untuk Register Public)
+            // Sync Public Register ke Mentors (Default: Umum, Gaji 0)
             try {
                 await supabase.from('mentors').insert([{
                     id: user.id,
                     name: username,
                     email: email,
                     phone_number: phone_number,
-                    subjects: 'Umum', 
+                    expertise: 'Umum', // ✅ Pakai 'expertise'
+                    salary_per_session: 0, 
                     status: 'AKTIF'
                 }])
             } catch (mentorErr) {
-                console.error("Gagal auto-sync public register ke mentors:", mentorErr)
+                console.error("Gagal auto-sync public register:", mentorErr)
             }
 
-            // Backup ke memory store
             userStore.saveRole(user.id, user.email || email, normalizedRole)
         } catch (e) {
             console.error("Error saving user profile:", e)
@@ -89,7 +87,6 @@ async function login(req, res) {
             role = userStore.getRole(user.id) || null
         }
         role = (role || '').toUpperCase() || null
-        console.log('[auth.controller] login resolved role', user.id, role)
 
         return res.json({ user: { id: user.id, email: user.email, role }, session })
     } catch (err) {
@@ -126,10 +123,10 @@ async function me(req, res) {
 }
 
 // --- REGISTER INTERNAL (Admin/Owner Dashboard) ---
-// ✅ LOGIKA SINKRONISASI DATA MENTOR DITAMBAHKAN DI SINI
 async function registerInternal(req, res) {
     try {
-        const { username, email, phone_number, birthday, password, role } = req.body || {}
+        // ✅ 1. Tangkap 'expertise' (bukan subjects) & 'salary_per_session'
+        const { username, email, phone_number, birthday, password, role, expertise, salary_per_session } = req.body || {}
         
         if (!username || !email || !password || !role) {
             return res.status(400).json({ error: 'Username, email, password, dan role wajib diisi.' })
@@ -142,7 +139,7 @@ async function registerInternal(req, res) {
             return res.status(400).json({ error: 'Role tidak valid.' })
         }
 
-        // 1. Buat User Authentication di Supabase
+        // 2. Buat User Authentication di Supabase
         let user = null
         if (supabase.auth && supabase.auth.admin && typeof supabase.auth.admin.createUser === 'function') {
              const { data, error } = await supabase.auth.admin.createUser({ email, password, email_confirm: true })
@@ -156,7 +153,7 @@ async function registerInternal(req, res) {
         
         if (!user || !user.id) return res.status(500).json({ error: 'Gagal membuat user auth' })
 
-        // 2. Simpan Profile ke Tabel 'users'
+        // 3. Simpan Profile ke Tabel 'users'
         try {
             await supabase.from('users').upsert({
                 id: user.id,
@@ -172,27 +169,33 @@ async function registerInternal(req, res) {
              return res.status(500).json({ error: "Gagal menyimpan data user." });
         }
 
-        // 3. ✅ [PENTING] Jika Role MENTOR, Duplikasi data ke tabel 'mentors'
+        // 4. ✅ [FIX] Simpan ke Tabel Mentors (Gunakan Upsert & Expertise)
         if (normalizedRole === 'MENTOR') {
             try {
+                // Validasi Gaji
+                const salary = salary_per_session ? parseInt(salary_per_session) : 0;
+
+                // Gunakan UPSERT untuk memastikan data masuk/terupdate
                 const { error: mentorError } = await supabase
                     .from('mentors')
-                    .insert([{
-                        id: user.id,          // Foreign Key ke users.id
-                        name: username,       // Ambil dari username
+                    .upsert([{
+                        id: user.id,
+                        name: username,
                         email: email,
                         phone_number: phone_number,
-                        subjects: 'Umum',     // Default value
+                        // ✅ Pastikan nama kolom di DB adalah 'expertise'
+                        expertise: expertise || 'Umum', 
+                        salary_per_session: isNaN(salary) ? 0 : salary,
                         status: 'AKTIF'
                     }]);
                 
                 if (mentorError) {
                     console.error("❌ Gagal sync ke tabel mentors:", mentorError);
                 } else {
-                    console.log(`✅ [Auth] Berhasil sync user ${username} ke tabel mentors.`);
+                    console.log(`✅ Sukses sync mentor: ${username}, Gaji: ${salary}`);
                 }
             } catch (err) {
-                console.error("Crash saat sync mentor:", err);
+                console.error("Crash sync mentors:", err);
             }
         }
 

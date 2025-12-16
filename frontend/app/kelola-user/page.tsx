@@ -4,11 +4,12 @@ import DashboardLayout from '@/components/DashboardLayout'
 import { UserPlus, Save, Loader2, ShieldAlert } from 'lucide-react'
 import { getUserRole } from '@/lib/auth'
 import { useRouter } from 'next/navigation'
+import { useLoading } from '@/context/LoadingContext'
 
 export default function KelolaUserPage() {
-    const [role, setRole] = useState<string | null>(null)
+    const [currentUserRole, setCurrentUserRole] = useState<string | null>(null)
     const router = useRouter()
-    const [loading, setLoading] = useState(false)
+    const { withLoading } = useLoading()
     const [message, setMessage] = useState<{type: 'success'|'error', text: string} | null>(null)
 
     const [form, setForm] = useState({
@@ -16,56 +17,61 @@ export default function KelolaUserPage() {
         email: '',
         password: '',
         phone_number: '',
-        birthday: '', // Format YYYY-MM-DD
-        role: 'MENTOR' // Default
+        birthday: '',
+        role: 'MENTOR',
+        subjects: '',
+        salary_per_session: '' 
     })
 
     useEffect(() => {
-        const userRole = getUserRole()
-        setRole(userRole)
-        // Jika bukan OWNER/ADMIN, tendang keluar
-        if (userRole !== 'OWNER' && userRole !== 'ADMIN') {
+        const role = getUserRole()
+        setCurrentUserRole(role)
+        if (role !== 'OWNER' && role !== 'ADMIN') {
             router.push('/dashboard')
         }
     }, [])
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
-        setLoading(true)
         setMessage(null)
 
-        try {
-            // Gunakan endpoint register-internal yang sudah kita buat di backend
-            const res = await fetch('http://localhost:4000/api/auth/register-internal', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(form),
-                // credentials: 'include' // Aktifkan jika backend butuh cookie session owner
-            })
+        await withLoading(async () => {
+            try {
+                // ✅ UPDATE: Admin DIPERBOLEHKAN kirim gaji saat buat akun
+                // Kita tidak lagi memaksa salary = '0' jika user bukan Owner.
+                const payload = { ...form }
 
-            const data = await res.json()
+                const res = await fetch('http://localhost:4000/api/auth/register-internal', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                })
 
-            if (!res.ok) {
-                throw new Error(data.error || 'Gagal membuat user')
+                const data = await res.json()
+                if (!res.ok) throw new Error(data.error || 'Gagal membuat user')
+
+                setMessage({ type: 'success', text: `Sukses membuat akun: ${form.username} (${form.role})` })
+                
+                // Reset Form
+                setForm({ 
+                    username: '', email: '', password: '', phone_number: '', birthday: '', 
+                    role: 'MENTOR', subjects: '', salary_per_session: '' 
+                })
+                
+            } catch (error: any) {
+                setMessage({ type: 'error', text: error.message })
             }
-
-            setMessage({ type: 'success', text: `Berhasil membuat user: ${form.username} (${form.role})` })
-            // Reset form
-            setForm({ username: '', email: '', password: '', phone_number: '', birthday: '', role: 'MENTOR' })
-            
-        } catch (error: any) {
-            setMessage({ type: 'error', text: error.message })
-        } finally {
-            setLoading(false)
-        }
+        })
     }
 
-    // Input Helper
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         setForm({ ...form, [e.target.name]: e.target.value })
     }
 
-    if (role !== 'OWNER' && role !== 'ADMIN') return null // Prevent flash
+    if (currentUserRole !== 'OWNER' && currentUserRole !== 'ADMIN') return null
+
+    // Helper Boolean
+    const isOwner = currentUserRole === 'OWNER'
 
     return (
         <DashboardLayout title="Kelola Pengguna">
@@ -102,24 +108,60 @@ export default function KelolaUserPage() {
                             <option value="MENTOR">MENTOR (Guru)</option>
                             <option value="BENDAHARA">BENDAHARA (Keuangan)</option>
                             <option value="ADMIN">ADMIN (Operasional)</option>
-                            {/* Hanya Owner yang bisa bikin Owner lain, opsional */}
-                            {role === 'OWNER' && <option value="OWNER">OWNER</option>}
+                            {isOwner && <option value="OWNER">OWNER</option>}
                         </select>
                     </div>
+
+                    {/* ✅ INPUT KHUSUS MENTOR */}
+                    {form.role === 'MENTOR' && (
+                        <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 grid grid-cols-1 md:grid-cols-2 gap-4 animate-fade-in">
+                            <div className="md:col-span-2">
+                                <h3 className="text-sm font-bold text-[#0077AF] mb-2 flex items-center gap-2">
+                                    <span className="w-2 h-2 rounded-full bg-[#0077AF]"></span>
+                                    Detail Mentor
+                                </h3>
+                            </div>
+                            
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-600 mb-1">Mata Pelajaran</label>
+                                <input 
+                                    type="text" name="subjects" value={form.subjects} onChange={handleChange}
+                                    className="w-full p-2 border rounded-lg text-sm focus:ring-2 focus:ring-[#0077AF] outline-none" 
+                                    placeholder="Matematika, Fisika..."
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-600 mb-1">
+                                    Gaji Awal Per Sesi (Rp)
+                                    {/* ✅ Hapus label (Owner Only) karena Admin sekarang boleh isi awal */}
+                                </label>
+                                <input 
+                                    type="number" name="salary_per_session" value={form.salary_per_session} onChange={handleChange}
+                                    // ✅ Disabled dihapus: Admin & Owner BISA input saat pembuatan
+                                    disabled={false} 
+                                    className="w-full p-2 border rounded-lg text-sm focus:ring-2 focus:ring-[#0077AF] outline-none" 
+                                    placeholder="Contoh: 50000"
+                                />
+                            </div>
+                        </div>
+                    )}
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                         <div>
                             <label className="block text-sm font-semibold text-gray-600 mb-1">Nama Lengkap</label>
                             <input 
                                 type="text" name="username" required value={form.username} onChange={handleChange}
-                                className="w-full p-2 border rounded-lg" placeholder="Nama User"
+                                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-[#0077AF] outline-none" 
+                                placeholder="Nama User"
                             />
                         </div>
                         <div>
                             <label className="block text-sm font-semibold text-gray-600 mb-1">Email</label>
                             <input 
                                 type="email" name="email" required value={form.email} onChange={handleChange}
-                                className="w-full p-2 border rounded-lg" placeholder="email@contoh.com"
+                                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-[#0077AF] outline-none" 
+                                placeholder="email@contoh.com"
                             />
                         </div>
                     </div>
@@ -129,14 +171,15 @@ export default function KelolaUserPage() {
                             <label className="block text-sm font-semibold text-gray-600 mb-1">No HP</label>
                             <input 
                                 type="text" name="phone_number" required value={form.phone_number} onChange={handleChange}
-                                className="w-full p-2 border rounded-lg" placeholder="08..."
+                                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-[#0077AF] outline-none" 
+                                placeholder="08..."
                             />
                         </div>
                         <div>
                             <label className="block text-sm font-semibold text-gray-600 mb-1">Tanggal Lahir</label>
                             <input 
                                 type="date" name="birthday" required value={form.birthday} onChange={handleChange}
-                                className="w-full p-2 border rounded-lg"
+                                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-[#0077AF] outline-none"
                             />
                         </div>
                     </div>
@@ -145,7 +188,7 @@ export default function KelolaUserPage() {
                         <label className="block text-sm font-bold text-gray-700 mb-1">Password Awal</label>
                         <input 
                             type="text" name="password" required value={form.password} onChange={handleChange}
-                            className="w-full p-2 border border-gray-300 rounded-lg font-mono" 
+                            className="w-full p-2 border border-gray-300 rounded-lg font-mono focus:ring-2 focus:ring-[#0077AF] outline-none" 
                             placeholder="Buat password sementara..."
                         />
                         <p className="text-xs text-gray-500 mt-1">*Berikan password ini kepada pengguna. Mereka dapat menggantinya nanti.</p>
@@ -153,11 +196,9 @@ export default function KelolaUserPage() {
 
                     <button 
                         type="submit" 
-                        disabled={loading}
                         className="w-full py-3 bg-[#0077AF] hover:bg-[#006699] text-white font-bold rounded-lg shadow-md transition-all flex justify-center items-center gap-2"
                     >
-                        {loading ? <Loader2 className="animate-spin" /> : <Save size={20} />}
-                        Buat Akun
+                        <Save size={20} /> Buat Akun
                     </button>
                 </form>
             </div>

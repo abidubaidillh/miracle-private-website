@@ -71,7 +71,7 @@ export default function Page() {
             <label className="text-white font-medium mb-2 text-sm">Username or Email</label>
             <div className="mt-2">
               <Input
-                ariaLabel="username or email"
+                aria-label="username or email"
                 value={email}
                 onChange={(e: any) => setEmail(e.target.value)}
                 placeholder="Username or email"
@@ -83,7 +83,7 @@ export default function Page() {
             <label className="text-white font-medium mb-2 text-sm">Password</label>
             <div className="mt-2">
               <Input
-                ariaLabel="password"
+                aria-label="password"
                 type="password"
                 value={password}
                 onChange={(e: any) => setPassword(e.target.value)}

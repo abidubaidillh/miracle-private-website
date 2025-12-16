@@ -1,81 +1,81 @@
 // frontend/lib/auth.ts
 
-// Perbaiki tipe data untuk authObj
-interface AuthObject {
+export interface AuthObject {
   user: {
+    id: string;
     email: string;
     role: string;
-    name?: string; // name bisa optional dari API
-    [key: string]: any; // Memungkinkan properti lain
+    name?: string;
+    [key: string]: any;
   };
-  session: any; // Atau sesuaikan dengan interface session Anda
+  session: any;
 }
 
-export function _getAuthFromCookie() {
-  if (typeof document === 'undefined') return null
-  const cookie = document.cookie.split(';').map(s => s.trim()).find(s => s.startsWith('auth='))
-  if (!cookie) return null
-  try {
-    // Pastikan return value sesuai dengan AuthObject
-    return JSON.parse(decodeURIComponent(cookie.substring(5))) as AuthObject
-  } catch (e) {
-    return null
-  }
+// --- HELPER COOKIE ---
+
+export function getAuthCookie(): AuthObject | null {
+  if (typeof document === 'undefined') return null;
+  
+  const cookie = document.cookie
+    .split('; ')
+    .find((row) => row.startsWith('auth='));
+
+  if (!cookie) return null;
+
+  try {
+    const value = cookie.split('=')[1];
+    return JSON.parse(decodeURIComponent(value)) as AuthObject;
+  } catch (e) {
+    console.error("Gagal parse auth cookie", e);
+    return null;
+  }
 }
+
+export function saveAuth(authObj: AuthObject) {
+  if (typeof document === 'undefined') return;
+
+  if (authObj.user && !authObj.user.name) {
+    authObj.user.name = authObj.user.email.split('@')[0];
+  }
+
+  const val = encodeURIComponent(JSON.stringify(authObj));
+  document.cookie = `auth=${val}; path=/; max-age=86400; SameSite=Lax`;
+}
+
+export function clearAuth() {
+  if (typeof document === 'undefined') return;
+  document.cookie = `auth=; path=/; max-age=0; SameSite=Lax`;
+}
+
+// --- HELPER USER DATA ---
 
 export function getCurrentUser() {
-  const auth = _getAuthFromCookie()
-  return auth?.user || null
+  const auth = getAuthCookie();
+  return auth?.user || null;
 }
 
 export function getUserRole() {
-  return getCurrentUser()?.role || null
+  return getCurrentUser()?.role || null;
 }
 
 export function isAuthenticated() {
-  const auth = _getAuthFromCookie()
-  return !!(auth?.session?.access_token)
+  const auth = getAuthCookie();
+  return !!auth?.session?.access_token;
 }
 
-// KRITIS: saveAuth
-export function saveAuth(authObj: AuthObject) {
-  if (typeof document === 'undefined') return
-  
-  // Pastikan properti 'name' ada sebelum disimpan ke cookie agar Context dapat membacanya
-  if (!authObj.user.name) {
-      authObj.user.name = authObj.user.email.split('@')[0];
-  }
-
-  // Tambahkan opsi secure dan sameSite (hanya berlaku jika situs berjalan di HTTPS di production)
-  document.cookie = `auth=${encodeURIComponent(JSON.stringify(authObj))}; path=/; max-age=86400; SameSite=Lax` 
-}
-
-// ✅ FUNGSI PEMBERSIH COOKIE (TETAP SAMA, TAPI PENTING)
-export function clearAuth() {
-  if (typeof document === 'undefined') return
-  document.cookie = `auth=; path=/; max-age=0; SameSite=Lax`
-}
-
-// --- ✅ TAMBAHAN: FUNGSI API LOGOUT ---
-// Ganti URL port sesuai backend Anda (default 4000)
-const API_BASE_URL = 'http://localhost:4000/api/auth'; 
+// --- ✅ FUNGSI LOGOUT YANG HILANG ---
+const API_BASE_URL = 'http://localhost:4000/api/auth';
 
 export async function logoutUser() {
-    try {
-        // 1. Panggil server untuk logout (opsional tapi best practice)
-        await fetch(`${API_BASE_URL}/logout`, {
-            method: 'POST',
-            // credentials: 'include', // Aktifkan jika nanti pakai HttpOnly cookie
-        });
-
-        // 2. Hapus cookie di browser (Client side)
-        clearAuth(); 
-
-        return true;
-    } catch (error) {
-        console.error("Logout Error:", error);
-        // Tetap hapus cookie client side meski server error agar user bisa keluar
-        clearAuth();
-        return false;
-    }
+  try {
+    // Panggil logout server (opsional)
+    await fetch(`${API_BASE_URL}/logout`, { method: 'POST' }).catch(() => {});
+    
+    // Hapus cookie
+    clearAuth();
+    return true;
+  } catch (error) {
+    clearAuth();
+    return false;
+  }
 }
