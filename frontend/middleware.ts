@@ -8,13 +8,19 @@ export function middleware(req: NextRequest) {
   // 1. Dapatkan Cookie Auth
   const authCookie = req.cookies.get('auth')?.value
 
-  // 2. Tentukan apakah ini halaman publik (Login/Register)
-  const isPublicPage = pathname === '/login' || pathname === '/register'
+  // 2. Tentukan apakah ini halaman publik
+  // 🚨 PENTING: '/register' DIHAPUS dari sini agar tidak bisa diakses publik
+  const isPublicPage = pathname === '/login'
 
   // --- LOGIKA REDIRECT ---
 
+  // BLOKIR AKSES KE /register SECARA EKSPLISIT
+  if (pathname === '/register') {
+    url.pathname = '/login'
+    return NextResponse.redirect(url)
+  }
+
   // KASUS A: User mengakses Root ('/')
-  // Middleware akan menentukan dia harus ke mana
   if (pathname === '/') {
     if (authCookie) {
       try {
@@ -23,7 +29,6 @@ export function middleware(req: NextRequest) {
         url.pathname = getRoleDefaultPath(role)
         return NextResponse.redirect(url)
       } catch (e) {
-        // Cookie rusak, hapus dan ke login
         url.pathname = '/login'
         const response = NextResponse.redirect(url)
         response.cookies.delete('auth')
@@ -35,8 +40,7 @@ export function middleware(req: NextRequest) {
     }
   }
 
-  // KASUS B: User SUDAH Login, tapi mencoba buka halaman Login/Register
-  // Lempar balik ke Dashboard/Halaman Default mereka
+  // KASUS B: User SUDAH Login, tapi mencoba buka halaman Login
   if (authCookie && isPublicPage) {
     try {
       const auth = JSON.parse(decodeURIComponent(authCookie))
@@ -44,7 +48,7 @@ export function middleware(req: NextRequest) {
       url.pathname = getRoleDefaultPath(role)
       return NextResponse.redirect(url)
     } catch (e) {
-      // Ignore error, let them go to login if cookie is bad
+      // Ignore error
     }
   }
 
@@ -55,7 +59,6 @@ export function middleware(req: NextRequest) {
   }
 
   // KASUS D: Validasi Hak Akses Role (RBAC)
-  // Hanya dijalankan jika user sudah login dan berada di halaman private
   if (authCookie && !isPublicPage) {
     try {
       const auth = JSON.parse(decodeURIComponent(authCookie))
@@ -63,8 +66,7 @@ export function middleware(req: NextRequest) {
 
       // --- ATURAN HAK AKSES SESUAI REQUIREMENT ---
 
-      // 1. Keuangan, Gaji, Biaya Ops (Hanya Owner & Bendahara, Admin view only/partial)
-      // MENTOR DILARANG MASUK SINI
+      // 1. Keuangan & Gaji (Owner & Bendahara only)
       if (
         pathname.startsWith('/keuangan') || 
         pathname.startsWith('/gaji-mentor') || 
@@ -72,28 +74,32 @@ export function middleware(req: NextRequest) {
         pathname.startsWith('/pembayaran')
       ) {
         if (role === 'MENTOR') {
-          return NextResponse.redirect(new URL('/jadwal', req.url)) // Mentor dilempar ke Jadwal
+          return NextResponse.redirect(new URL('/jadwal', req.url))
         }
       }
 
-      // 2. Jadwal (Owner, Admin, Mentor)
-      // BENDAHARA DILARANG MASUK SINI (Sesuai tabel: Jadwal -> Bendahara ❌)
+      // 2. Jadwal (Owner, Admin, Mentor) - Bendahara dilarang
       if (pathname.startsWith('/jadwal')) {
         if (role === 'BENDAHARA') {
-          return NextResponse.redirect(new URL('/keuangan', req.url)) // Bendahara dilempar ke Keuangan
+          return NextResponse.redirect(new URL('/keuangan', req.url))
         }
       }
 
-      // 3. Paket Kelas & Murid (Owner, Admin, Bendahara view only)
-      // MENTOR DILARANG MASUK SINI
+      // 3. Paket Kelas & Murid (Owner, Admin, Bendahara) - Mentor dilarang
       if (pathname.startsWith('/paket-kelas') || pathname.startsWith('/murid')) {
         if (role === 'MENTOR') {
           return NextResponse.redirect(new URL('/jadwal', req.url))
         }
       }
+      
+      // 4. Kelola User (Hanya Owner & Admin)
+      if (pathname.startsWith('/kelola-user')) {
+         if (role !== 'OWNER' && role !== 'ADMIN') {
+             return NextResponse.redirect(new URL('/dashboard', req.url))
+         }
+      }
 
     } catch (e) {
-      // Jika parsing gagal, anggap sesi tidak valid
       url.pathname = '/login'
       const response = NextResponse.redirect(url)
       response.cookies.delete('auth')
@@ -111,17 +117,14 @@ function getRoleDefaultPath(role: string): string {
     case 'ADMIN':
       return '/dashboard'
     case 'BENDAHARA':
-      return '/keuangan' // Fokus utama bendahara
+      return '/keuangan'
     case 'MENTOR':
-      return '/jadwal'   // Fokus utama mentor
+      return '/jadwal'
     default:
       return '/login'
   }
 }
 
-// Konfigurasi Matcher:
-// Middleware TIDAK akan berjalan pada path yang cocok dengan regex ini.
-// Kita mengecualikan: api, _next/static, _next/image, favicon.ico, dan logo-lembaga.png
 export const config = {
   matcher: [
     '/((?!api|_next/static|_next/image|favicon.ico|logo-lembaga.png|aset).*)',

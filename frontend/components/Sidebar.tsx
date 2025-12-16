@@ -1,9 +1,8 @@
-// components/Sidebar.tsx
 "use client"
 
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation' // ✅ Tambah useRouter
+import { usePathname, useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { 
     LayoutDashboard, 
@@ -17,12 +16,10 @@ import {
     ClipboardList, 
     TrendingUp, 
     FileText, 
-    LogOut 
+    LogOut,
+    UserPlus // ✅ Icon untuk Kelola User
 } from 'lucide-react'
-import { logoutUser } from '@/lib/auth' // ✅ Import fungsi logout
-
-// Hapus interface props karena kita handle logic di sini
-// interface SidebarProps { logout?: () => void; }
+import { logoutUser, getUserRole } from '@/lib/auth' // ✅ Import getUserRole
 
 const menuItems = [
     { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -38,14 +35,19 @@ const menuItems = [
     { label: 'Laporan', href: '/laporan', icon: FileText },
 ]
 
-export default function Sidebar() { // Hapus { logout }
+export default function Sidebar() {
     const pathname = usePathname()
-    const router = useRouter() // ✅ Hook redirect
+    const router = useRouter()
+    const [role, setRole] = useState<string | null>(null)
 
-    // --- ✅ LOGIC LOGOUT ---
+    // ✅ Ambil role saat komponen dimuat
+    useEffect(() => {
+        setRole(getUserRole())
+    }, [])
+
     const handleLogout = async () => {
-        await logoutUser(); // Panggil API & Hapus Cookie
-        router.push('/login'); // Redirect ke login page (sesuaikan URL login Anda)
+        await logoutUser();
+        router.push('/login');
     }
 
     return (
@@ -53,9 +55,8 @@ export default function Sidebar() { // Hapus { logout }
             {/* Header Sidebar: LOGO */}
             <div className="flex flex-col items-center justify-center py-8 border-b border-[#006699]">
                 <div className="relative w-40 h-16"> 
-                    {/* Pastikan file gambar ada di public/logo-lembaga.png */}
                     <Image
-                        src="/logo-lembaga.png" // Sesuaikan path jika berbeda
+                        src="/logo-lembaga.png" 
                         alt="Miracle Private Class"
                         fill
                         sizes="(max-width: 768px) 100vw, 33vw"
@@ -89,12 +90,32 @@ export default function Sidebar() { // Hapus { logout }
                         )
                     })}
                 </ul>
+
+                {/* ✅ MENU ADMIN AREA: Hanya untuk Owner & Admin */}
+                {(role === 'OWNER' || role === 'ADMIN') && (
+                    <div className="mt-6 pt-4 border-t border-[#006699]/50">
+                        <p className="px-4 text-xs font-bold text-blue-200 uppercase tracking-wider mb-2">
+                            Admin Area
+                        </p>
+                        <Link
+                            href="/kelola-user"
+                            className={`flex items-center px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 ${
+                                pathname.startsWith('/kelola-user')
+                                    ? 'bg-white text-[#0077AF] font-bold shadow-md'
+                                    : 'text-gray-100 hover:bg-[#006699] hover:text-white'
+                            }`}
+                        >
+                            <UserPlus size={20} className="mr-3" />
+                            Kelola User
+                        </Link>
+                    </div>
+                )}
             </nav>
 
             {/* Logout Button */}
             <div className="p-4 mt-auto border-t border-[#006699]">
                 <button
-                    onClick={handleLogout} // ✅ Panggil handleLogout
+                    onClick={handleLogout}
                     className="w-full flex items-center justify-center px-4 py-3 bg-red-500/10 hover:bg-red-500 text-red-100 hover:text-white rounded-lg transition-all duration-200 text-sm font-bold"
                 >
                     <LogOut size={20} className="mr-2" /> Logout

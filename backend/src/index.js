@@ -13,7 +13,8 @@ const cookieParser = require('cookie-parser')
 const authRoutes = require('./routes/auth.routes')
 const muridRoutes = require('./routes/murid.routes')
 const mentorRoutes = require('./routes/mentor.routes') 
-const paketRoutes = require('./routes/paket.routes') // ✅ SUDAH BENAR
+const paketRoutes = require('./routes/paket.routes')
+const jadwalRoutes = require('./routes/jadwal.routes') // ✅ Import Jadwal
 
 // ==========================================================
 // Middleware Utama
@@ -44,7 +45,7 @@ app.get('/', (req, res) => {
 })
 
 // ==========================================================
-// Mount Routes (SAMA POLA DENGAN MURID)
+// Mount Routes
 // ==========================================================
 
 // 1. Auth
@@ -71,12 +72,20 @@ try {
     console.error('❌ Failed to mount mentorRoutes:', e.message)
 }
 
-// 4. Paket Kelas (✅ TAMBAHAN INI YANG SEBELUMNYA KURANG)
+// 4. Paket Kelas
 try {
     app.use('/api/packages', paketRoutes)
     console.log('✅ Paket Routes mounted at /api/packages')
 } catch (e) {
     console.error('❌ Failed to mount paketRoutes:', e.message)
+}
+
+// 5. Jadwal / Schedules (✅ BAGIAN INI DITAMBAHKAN)
+try {
+    app.use('/api/schedules', jadwalRoutes)
+    console.log('✅ Jadwal Routes mounted at /api/schedules')
+} catch (e) {
+    console.error('❌ Failed to mount jadwalRoutes:', e.message)
 }
 
 // ==========================================================

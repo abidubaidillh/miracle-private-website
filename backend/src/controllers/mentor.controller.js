@@ -2,13 +2,7 @@
 
 const supabase = require('../config/supabase')
 
-/**
- * =====================================================
- * A. GET (READ)
- * =====================================================
- * OWNER, ADMIN, BENDAHARA → lihat semua mentor
- * MENTOR → hanya lihat data dirinya sendiri
- */
+// A. GET (READ)
 const getAllMentor = async (req, res) => {
   const { status, search } = req.query
   const userRole = req.user.role
@@ -20,10 +14,9 @@ const getAllMentor = async (req, res) => {
       .select('*')
       .order('name', { ascending: true })
 
-    // 🔐 Mentor hanya lihat dirinya sendiri
-    // CATATAN: mentors.user_id HARUS ADA
+    // 🔐 MENTOR hanya lihat dirinya sendiri
     if (userRole === 'MENTOR') {
-      query = query.eq('user_id', userId)
+      query = query.eq('id', userId) // Asumsi ID di mentors = ID user auth
     }
 
     if (status && ['AKTIF', 'NON-AKTIF'].includes(status)) {
@@ -31,75 +24,24 @@ const getAllMentor = async (req, res) => {
     }
 
     if (search) {
-      query = query.or(
-        `name.ilike.%${search}%,phone_number.ilike.%${search}%,expertise.ilike.%${search}%`
-      )
+      query = query.or(`name.ilike.%${search}%,phone_number.ilike.%${search}%`)
     }
 
     const { data: mentors, error } = await query
     if (error) throw error
 
-    let stats = { active: 0, inactive: 0 }
-
-    // Mentor tidak perlu statistik global
-    if (userRole !== 'MENTOR') {
-      const { count: active } = await supabase
-        .from('mentors')
-        .select('id', { count: 'exact', head: true })
-        .eq('status', 'AKTIF')
-
-      const { count: inactive } = await supabase
-        .from('mentors')
-        .select('id', { count: 'exact', head: true })
-        .eq('status', 'NON-AKTIF')
-
-      stats = {
-        active: active || 0,
-        inactive: inactive || 0,
-      }
-    }
-
-    return res.status(200).json({
-      mentors,
-      stats,
-    })
+    return res.status(200).json({ mentors })
   } catch (err) {
-    return res.status(500).json({
-      message: 'Gagal mengambil data mentor',
-      error: err.message,
-    })
+    return res.status(500).json({ message: 'Gagal mengambil data mentor', error: err.message })
   }
 }
 
-/**
- * =====================================================
- * B. POST (CREATE)
- * =====================================================
- * OWNER, ADMIN
- */
+// B. POST (CREATE)
 const createMentor = async (req, res) => {
-  const {
-    name,
-    phone_number,
-    address,
-    expertise,
-    salary_per_session,
-    status,
-    user_id,
-  } = req.body
+  const { name, phone_number, address, expertise, salary_per_session, status, user_id } = req.body
 
-  if (!name || !phone_number || salary_per_session === undefined) {
-    return res.status(400).json({
-      message: 'Nama, No HP, dan Gaji per sesi wajib diisi',
-    })
-  }
-
-  const salary = parseInt(salary_per_session)
-  if (isNaN(salary) || salary < 0) {
-    return res.status(400).json({
-      message: 'Gaji per sesi tidak valid',
-    })
-  }
+  // Jika Admin yang buat, salary mungkin 0 atau null, itu OK.
+  const salary = salary_per_session ? parseInt(salary_per_session) : 0
 
   try {
     const { data, error } = await supabase
@@ -111,60 +53,37 @@ const createMentor = async (req, res) => {
         expertise,
         salary_per_session: salary,
         status: status?.toUpperCase() || 'AKTIF',
-        user_id: user_id || null,
+        // Jika user_id dikirim (manual linking), pakai itu. Jika tidak, biarkan null (atau create user auth dulu terpisah)
+        user_id: user_id || null 
       }])
       .select()
       .single()
 
     if (error) throw error
 
-    return res.status(201).json({
-      message: 'Mentor berhasil ditambahkan',
-      mentor: data,
-    })
+    return res.status(201).json({ message: 'Mentor berhasil ditambahkan', mentor: data })
   } catch (err) {
-    return res.status(500).json({
-      message: 'Gagal menambahkan mentor',
-      error: err.message,
-    })
+    return res.status(500).json({ message: 'Gagal menambahkan mentor', error: err.message })
   }
 }
 
-/**
- * =====================================================
- * C. PUT (UPDATE)
- * =====================================================
- * OWNER → full update
- * ADMIN → tidak boleh ubah salary
- */
+// C. PUT (UPDATE) - 🛡️ DENGAN PROTEKSI
 const updateMentor = async (req, res) => {
   const { id } = req.params
-  const userRole = req.user.role
+  const userRole = req.user.role // Didapat dari authMiddleware
   const updateData = { ...req.body }
 
-  // 🔐 ADMIN tidak boleh ubah gaji
-  if (userRole === 'ADMIN') {
-    delete updateData.salary_per_session
+  // 🛡️ SECURITY: Hapus field gaji jika bukan OWNER
+  if (userRole !== 'OWNER') {
+      if (updateData.salary_per_session !== undefined) {
+          console.warn(`[Security] User ${req.user.email} mencoba ubah gaji. Dibatalkan.`)
+          delete updateData.salary_per_session
+      }
   }
 
+  // Validasi Status
   if (updateData.status) {
-    const normalized = updateData.status.toUpperCase()
-    if (!['AKTIF', 'NON-AKTIF'].includes(normalized)) {
-      return res.status(400).json({
-        message: 'Status mentor tidak valid',
-      })
-    }
-    updateData.status = normalized
-  }
-
-  if (updateData.salary_per_session !== undefined) {
-    const salary = parseInt(updateData.salary_per_session)
-    if (isNaN(salary) || salary < 0) {
-      return res.status(400).json({
-        message: 'Gaji per sesi tidak valid',
-      })
-    }
-    updateData.salary_per_session = salary
+    updateData.status = updateData.status.toUpperCase()
   }
 
   try {
@@ -175,55 +94,24 @@ const updateMentor = async (req, res) => {
       .select()
       .single()
 
-    if (error || !data) {
-      return res.status(404).json({
-        message: 'Mentor tidak ditemukan',
-      })
-    }
-
-    return res.status(200).json({
-      message: 'Data mentor berhasil diperbarui',
-      mentor: data,
-    })
-  } catch (err) {
-    return res.status(500).json({
-      message: 'Gagal memperbarui mentor',
-      error: err.message,
-    })
-  }
-}
-
-/**
- * =====================================================
- * D. DELETE
- * =====================================================
- * OWNER ONLY (dibatasi di routes)
- */
-const deleteMentor = async (req, res) => {
-  const { id } = req.params
-
-  try {
-    const { error } = await supabase
-      .from('mentors')
-      .delete()
-      .eq('id', id)
-
     if (error) throw error
 
-    return res.status(200).json({
-      message: 'Mentor berhasil dihapus',
-    })
+    return res.status(200).json({ message: 'Mentor berhasil diperbarui', mentor: data })
   } catch (err) {
-    return res.status(500).json({
-      message: 'Gagal menghapus mentor',
-      error: err.message,
-    })
+    return res.status(500).json({ message: 'Gagal update mentor', error: err.message })
   }
 }
 
-module.exports = {
-  getAllMentor,
-  createMentor,
-  updateMentor,
-  deleteMentor,
+// D. DELETE
+const deleteMentor = async (req, res) => {
+  const { id } = req.params
+  try {
+    const { error } = await supabase.from('mentors').delete().eq('id', id)
+    if (error) throw error
+    return res.status(200).json({ message: 'Mentor berhasil dihapus' })
+  } catch (err) {
+    return res.status(500).json({ message: 'Gagal menghapus mentor', error: err.message })
+  }
 }
+
+module.exports = { getAllMentor, createMentor, updateMentor, deleteMentor }

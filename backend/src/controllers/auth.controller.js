@@ -1,27 +1,25 @@
-// src/controllers/auth.controller.js
+// backend/src/controllers/auth.controller.js
 
 const supabase = require('../config/supabase')
 const userStore = require('../data/userStore')
 
+// --- REGISTER PUBLIC (Default) ---
 async function register(req, res) {
     try {
-        // Accept only the allowed fields from client; ignore any provided `role`
         const { username, email, phone_number, birthday, password } = req.body || {}
         if (!username || !email || !phone_number || !birthday || !password) {
             return res.status(400).json({ error: 'username, email, phone_number, birthday, password required' })
         }
 
-        // Force role to MENTOR for all new registrations (single source of truth)
-        const normalizedRole = 'MENTOR'
+        const normalizedRole = 'MENTOR' // Default public registration is MENTOR
 
-        // create user via Supabase Admin if available
         let user = null
+        // Create user in Supabase Auth
         if (supabase.auth && supabase.auth.admin && typeof supabase.auth.admin.createUser === 'function') {
             const { data, error } = await supabase.auth.admin.createUser({ email, password, email_confirm: true })
             if (error) return res.status(400).json({ error: error.message || error })
             user = data?.user || data
         } else {
-            // fallback to signUp
             const { data, error } = await supabase.auth.signUp({ email, password })
             if (error) return res.status(400).json({ error: error.message || error })
             user = data?.user || data
@@ -29,10 +27,9 @@ async function register(req, res) {
 
         if (!user || !user.id) return res.status(500).json({ error: 'failed to create user' })
 
-        // store role in users table, fallback to local store if Supabase table missing
+        // Store in 'users' table
         try {
-            // Persist profile data and role to users table when available
-            const { data: upsertData, error: upsertError } = await supabase.from('users').upsert({
+            await supabase.from('users').upsert({
                 id: user.id,
                 email: user.email || email,
                 username,
@@ -40,27 +37,26 @@ async function register(req, res) {
                 birthday,
                 role: normalizedRole,
             })
-            // verify persisted
-            let persistedRole = null
+            
+            // ✅ SINKRONISASI KE TABEL MENTORS (Untuk Register Public)
             try {
-                const { data: sel, error: selErr } = await supabase.from('users').select('role').eq('id', user.id).single()
-                if (!selErr && sel) persistedRole = sel.role || null
-            } catch (e) {
-                // ignore
+                await supabase.from('mentors').insert([{
+                    id: user.id,
+                    name: username,
+                    email: email,
+                    phone_number: phone_number,
+                    subjects: 'Umum', 
+                    status: 'AKTIF'
+                }])
+            } catch (mentorErr) {
+                console.error("Gagal auto-sync public register ke mentors:", mentorErr)
             }
-            if (!persistedRole) {
-                userStore.saveRole(user.id, user.email || email, normalizedRole)
-            }
-        } catch (e) {
-            userStore.saveRole(user.id, user.email || email, normalizedRole)
-        }
 
-        // Always mirror role in in-memory store so backend can read it even if Supabase table isn't writable
-        try {
+            // Backup ke memory store
             userStore.saveRole(user.id, user.email || email, normalizedRole)
-            console.log('[auth.controller] saved role to userStore', user.id, normalizedRole)
         } catch (e) {
-            console.log('[auth.controller] failed to save role to userStore', e && e.message)
+            console.error("Error saving user profile:", e)
+            userStore.saveRole(user.id, user.email || email, normalizedRole)
         }
 
         return res.status(201).json({ user: { id: user.id, email: user.email, role: normalizedRole } })
@@ -69,6 +65,7 @@ async function register(req, res) {
     }
 }
 
+// --- LOGIN ---
 async function login(req, res) {
     try {
         const { email, password } = req.body || {}
@@ -91,9 +88,8 @@ async function login(req, res) {
         if (!role) {
             role = userStore.getRole(user.id) || null
         }
-        // NORMALIZE to UPPERCASE
         role = (role || '').toUpperCase() || null
-        console.log('[auth.controller] login resolved role', user.id, role, 'store=', userStore.getUser(user.id))
+        console.log('[auth.controller] login resolved role', user.id, role)
 
         return res.json({ user: { id: user.id, email: user.email, role }, session })
     } catch (err) {
@@ -101,6 +97,7 @@ async function login(req, res) {
     }
 }
 
+// --- ME (Check Token) ---
 async function me(req, res) {
     try {
         const token = req.access_token
@@ -117,12 +114,10 @@ async function me(req, res) {
             const { data: roleRow, error } = await supabase.from('users').select('role').eq('id', user.id).single()
             if (!error && roleRow) role = roleRow.role || null
         } catch (e) {
-            // ignore
+             // ignore
         }
         if (!role) role = userStore.getRole(user.id) || null
-        // NORMALIZE to UPPERCASE
         role = (role || '').toUpperCase() || null
-        console.log('[auth.controller] me resolved role', user.id, role, 'store=', userStore.getUser(user.id))
 
         return res.json({ user: { id: user.id, email: user.email, role } })
     } catch (err) {
@@ -130,7 +125,8 @@ async function me(req, res) {
     }
 }
 
-// --- FUNGSI BARU UNTUK PENDAFTARAN INTERNAL (ADMIN/OWNER) ---
+// --- REGISTER INTERNAL (Admin/Owner Dashboard) ---
+// ✅ LOGIKA SINKRONISASI DATA MENTOR DITAMBAHKAN DI SINI
 async function registerInternal(req, res) {
     try {
         const { username, email, phone_number, birthday, password, role } = req.body || {}
@@ -139,7 +135,6 @@ async function registerInternal(req, res) {
             return res.status(400).json({ error: 'Username, email, password, dan role wajib diisi.' })
         }
         
-        // Memastikan role yang diminta valid
         const validRoles = ['OWNER', 'ADMIN', 'BENDAHARA', 'MENTOR'];
         const normalizedRole = role.toUpperCase();
         
@@ -147,22 +142,21 @@ async function registerInternal(req, res) {
             return res.status(400).json({ error: 'Role tidak valid.' })
         }
 
-        // --- Logika Pembuatan User Supabase ---
+        // 1. Buat User Authentication di Supabase
         let user = null
         if (supabase.auth && supabase.auth.admin && typeof supabase.auth.admin.createUser === 'function') {
              const { data, error } = await supabase.auth.admin.createUser({ email, password, email_confirm: true })
              if (error) return res.status(400).json({ error: error.message || error })
              user = data?.user || data
         } else {
-             // fallback to signUp (hanya untuk testing, tidak disarankan untuk admin/owner)
              const { data, error } = await supabase.auth.signUp({ email, password })
              if (error) return res.status(400).json({ error: error.message || error })
              user = data?.user || data
         }
         
-        if (!user || !user.id) return res.status(500).json({ error: 'Gagal membuat user' })
+        if (!user || !user.id) return res.status(500).json({ error: 'Gagal membuat user auth' })
 
-        // --- Simpan Role yang Ditetapkan ---
+        // 2. Simpan Profile ke Tabel 'users'
         try {
             await supabase.from('users').upsert({
                 id: user.id,
@@ -170,29 +164,51 @@ async function registerInternal(req, res) {
                 username,
                 phone_number,
                 birthday,
-                role: normalizedRole, // Menggunakan role yang diset di body
+                role: normalizedRole,
             });
             userStore.saveRole(user.id, user.email || email, normalizedRole);
-            console.log(`[auth.controller] User internal created with role: ${normalizedRole}`);
         } catch (e) {
-             userStore.saveRole(user.id, user.email || email, normalizedRole);
+             console.error("Error upsert users:", e);
+             return res.status(500).json({ error: "Gagal menyimpan data user." });
         }
 
-        return res.status(201).json({ user: { id: user.id, email: user.email, role: normalizedRole } })
+        // 3. ✅ [PENTING] Jika Role MENTOR, Duplikasi data ke tabel 'mentors'
+        if (normalizedRole === 'MENTOR') {
+            try {
+                const { error: mentorError } = await supabase
+                    .from('mentors')
+                    .insert([{
+                        id: user.id,          // Foreign Key ke users.id
+                        name: username,       // Ambil dari username
+                        email: email,
+                        phone_number: phone_number,
+                        subjects: 'Umum',     // Default value
+                        status: 'AKTIF'
+                    }]);
+                
+                if (mentorError) {
+                    console.error("❌ Gagal sync ke tabel mentors:", mentorError);
+                } else {
+                    console.log(`✅ [Auth] Berhasil sync user ${username} ke tabel mentors.`);
+                }
+            } catch (err) {
+                console.error("Crash saat sync mentor:", err);
+            }
+        }
+
+        return res.status(201).json({ 
+            message: "User berhasil dibuat",
+            user: { id: user.id, email: user.email, role: normalizedRole } 
+        })
     } catch (err) {
         return res.status(500).json({ error: err.message || String(err) })
     }
 }
-// --- AKHIR FUNGSI BARU ---
 
-// --- ✅ TAMBAHAN: FUNGSI LOGOUT ---
+// --- LOGOUT ---
 async function logout(req, res) {
     try {
-        // Jika Anda menggunakan HTTP-only cookie di masa depan, baris ini berguna.
-        // Saat ini frontend menggunakan document.cookie, tapi endpoint ini tetap penting
-        // untuk memberi sinyal ke server (misal: invalidasi session Supabase).
-        
-        res.clearCookie('token'); // Bersihkan cookie server-side jika ada
+        res.clearCookie('token'); 
         return res.status(200).json({ message: 'Logout berhasil di sisi server' });
     } catch (err) {
         console.error("Logout Error:", err);
@@ -200,4 +216,4 @@ async function logout(req, res) {
     }
 }
 
-module.exports = { register, login, me, registerInternal, logout } // <-- EXPORT BARU
+module.exports = { register, login, me, registerInternal, logout }

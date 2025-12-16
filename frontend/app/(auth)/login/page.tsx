@@ -1,14 +1,11 @@
-// frontend/app/(auth)/login/page.tsx
 "use client"
 
 import React, { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Input from '../../../components/Input'
 import Button from '../../../components/Button'
-// IMPORT CONTEXT
-import { useUser } from '@/context/UserContext'; 
-
-// HAPUS import { saveAuth } from '../../../lib/auth' karena sudah ditangani Context
+import { useUser } from '@/context/UserContext'
+import { useLoading } from '@/context/LoadingContext' // ✅ 1. Import Global Loading
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'
 
@@ -23,46 +20,50 @@ function roleToPath(role: string) {
 
 export default function Page() {
   const router = useRouter()
-  // AMBIL FUNGSI LOGIN DARI CONTEXT
-  const { login } = useUser(); 
+  const { login } = useUser()
+  const { withLoading } = useLoading() // ✅ 2. Gunakan Hook Loading
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
+  
+  // ❌ State loading lokal dihapus karena sudah pakai global
+  // const [loading, setLoading] = useState(false) 
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
-    setLoading(true)
 
-    try {
-      const res = await fetch(`${API}/api/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      })
-      const data = await res.json()
-      
-      if (!res.ok) throw new Error(data?.error || 'Login failed')
+    // ✅ 3. Bungkus proses dengan withLoading
+    // Layar akan otomatis blur dan animasi loading muncul
+    await withLoading(async () => {
+      try {
+        const res = await fetch(`${API}/api/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        })
+        const data = await res.json()
+        
+        if (!res.ok) throw new Error(data?.error || 'Login failed')
 
-      // KRITIS: Gunakan fungsi login dari Context, BUKAN saveAuth manual
-      // Ini akan menyimpan token DAN mengupdate state aplikasi secara instan
-      login({ user: data.user, session: data.session });
+        // Simpan sesi user ke context
+        login({ user: data.user, session: data.session })
 
-      // Redirect sesuai role
-      router.push(roleToPath(data.user.role))
-      
-    } catch (err: any) {
-      setError(err.message || String(err))
-    } finally {
-      setLoading(false)
-    }
+        // Redirect ke halaman sesuai role
+        // Loading screen akan tetap muncul sebentar sampai halaman berpindah
+        router.push(roleToPath(data.user.role))
+        
+      } catch (err: any) {
+        // Jika error, loading otomatis mati (handled by context), lalu kita set pesan error
+        setError(err.message || String(err))
+      }
+    })
   }
 
   return (
     <div className="fixed inset-0 flex items-center justify-center px-4 py-8" style={{ background: 'linear-gradient(180deg, #0077AF 0%, #003249 100%)' }}>
-      <div className="auth-card">
+      <div className="auth-card shadow-2xl transition-all duration-300"> 
         <h1 className="auth-heading">Login</h1>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -91,20 +92,20 @@ export default function Page() {
             </div>
           </div>
 
-          {error && <div className="text-red-300 text-sm text-center bg-red-900/20 p-2 rounded">{error}</div>}
+          {error && (
+            <div className="text-red-200 text-sm text-center bg-red-900/50 border border-red-500/50 p-2 rounded animate-pulse">
+              ⚠️ {error}
+            </div>
+          )}
 
-          <div className="flex justify-center mt-4">
-            <Button type="submit" disabled={loading}>
-              {loading ? 'Loading...' : 'Login'}
+          <div className="flex justify-center mt-6">
+            <Button type="submit">
+               {/* Teks tombol statis saja, karena loading screen akan menutupi seluruh layar */}
+               Masuk
             </Button>
-          </div>
-
-          <div className="text-center mt-3 small-muted">
-            <span>Belum punya Akun ? </span>
-            <a href="/register" style={{ color: '#3DA9FB' }} className="hover:underline">Daftar Disini</a>
           </div>
         </form>
       </div>
     </div>
   )
-} 
+}
