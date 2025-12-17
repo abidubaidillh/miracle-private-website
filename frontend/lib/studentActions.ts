@@ -1,29 +1,47 @@
 // lib/studentActions.ts
 
-// Hapus import getSupabaseClient karena semua operasi CRUD dialihkan ke Express.js
-// import { getSupabaseClient } from './supabaseClient'; 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL 
+    ? `${process.env.NEXT_PUBLIC_API_URL}/api/students` 
+    : 'http://localhost:4000/api/students';
 
-// URL Backend Anda
-const API_BASE_URL = 'http://localhost:4000/api/students'; 
+// =============================================================================
+// HELPER: Get Auth Headers (WAJIB untuk menembus Middleware Backend)
+// =============================================================================
+const getHeaders = () => {
+    let token = '';
+    if (typeof document !== 'undefined') {
+        // Cari cookie bernama 'auth'
+        const match = document.cookie.match(new RegExp('(^| )auth=([^;]+)'));
+        if (match) {
+            try {
+                const authData = JSON.parse(decodeURIComponent(match[2]));
+                token = authData.session.access_token;
+            } catch (e) {
+                console.warn("Gagal parse token auth", e);
+            }
+        }
+    }
+    return {
+        'Content-Type': 'application/json',
+        'Authorization': token ? `Bearer ${token}` : ''
+    }
+}
 
-// Definisikan tipe data Student
+// =============================================================================
+// TIPE DATA
+// =============================================================================
 export interface Student {
     id: string; 
     name: string;
     age: number;
     phone_number: string; 
     address: string;
-    
-    // --- TAMBAHAN BARU (Sesuai Modal & Database) ---
     parent_name: string; 
     parent_phone: string;
-    // -----------------------------------------------
-
     status: 'AKTIF' | 'NON-AKTIF';
     package_id: string | null;
 }
 
-// Interface untuk data yang dikembalikan oleh API
 interface StudentDataResponse {
     students: Student[];
     stats: {
@@ -32,77 +50,51 @@ interface StudentDataResponse {
     }
 }
 
-
 // =============================================================================
-// 1. GET (READ ALL & Search)
+// 1. GET (READ ALL & Search) - Digunakan juga oleh Modal Pembayaran
 // =============================================================================
-export async function getStudentsData(search: string = ""): Promise<{ students: Student[], totalCount: number, activeCount: number, inactiveCount: number }> {
-    let url = API_BASE_URL;
-    
+export async function getStudents(search: string = ""): Promise<StudentDataResponse> {
     const params = new URLSearchParams();
-    if (search) {
-        params.append('search', search);
-    }
+    if (search) params.append('search', search);
     
-    if (params.toString()) {
-        url += `?${params.toString()}`;
-    }
+    const url = `${API_BASE_URL}?${params.toString()}`;
 
     try {
-        console.log(`[ACTION] Fetching students from: ${url}`);
-        
         const response = await fetch(url, {
             method: 'GET',
+            headers: getHeaders(), // ✅ Pakai Token
             cache: 'no-store', 
         });
 
         if (!response.ok) {
             const errorData = await response.json();
-            throw new Error(errorData.message || `Gagal fetch data murid: Status ${response.status}`);
+            throw new Error(errorData.message || `Gagal fetch data murid`);
         }
 
         const data: StudentDataResponse = await response.json();
-        
-        const students = data.students || [];
-        const activeCount = data.stats?.active || 0;
-        const inactiveCount = data.stats?.inactive || 0;
-        
-        return { 
-            students: students, 
-            totalCount: students.length,
-            activeCount: activeCount, 
-            inactiveCount: inactiveCount
-        };
+        return data; // Mengembalikan { students: [], stats: {} }
         
     } catch (e: any) {
-        console.error("Error fetching students data from backend:", e);
-        throw new Error(`Operasi READ Gagal: ${e.message}`);
+        console.error("Error fetching students:", e);
+        // Return fallback kosong agar UI tidak crash
+        return { students: [], stats: { active: 0, inactive: 0 } };
     }
 }
-
 
 // =============================================================================
 // 2. POST (CREATE)
 // =============================================================================
-// Interface Omit akan otomatis mengecualikan ID, tapi MEWAJIBKAN parent_name & parent_phone
-export async function createStudent(newStudentData: Omit<Student, 'id' | 'package_id'>): Promise<Student> {
-    
+export async function createStudent(newStudentData: any): Promise<Student> {
     const response = await fetch(API_BASE_URL, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            // 'Authorization': `Bearer ${token}` 
-        },
-        // Body akan otomatis menyertakan parent_name & parent_phone dari Form
+        headers: getHeaders(), // ✅ Pakai Token
         body: JSON.stringify(newStudentData),
     });
 
     const result = await response.json();
 
     if (!response.ok) {
-        console.error('Error creating student:', result); 
-        const errorMessage = result.message || 'Gagal menambahkan murid baru.';
-        throw new Error(errorMessage);
+        throw new Error(result.message || 'Gagal menambahkan murid baru.');
     }
     
     return result.student as Student;
@@ -111,23 +103,17 @@ export async function createStudent(newStudentData: Omit<Student, 'id' | 'packag
 // =============================================================================
 // 3. PUT (UPDATE)
 // =============================================================================
-export async function updateStudent(studentId: string, updateData: Partial<Omit<Student, 'id'>>): Promise<Student> {
-    
+export async function updateStudent(studentId: string, updateData: any): Promise<Student> {
     const response = await fetch(`${API_BASE_URL}/${studentId}`, {
         method: 'PUT',
-        headers: {
-            'Content-Type': 'application/json',
-            // 'Authorization': `Bearer ${token}` 
-        },
+        headers: getHeaders(), // ✅ Pakai Token
         body: JSON.stringify(updateData),
     });
 
     const result = await response.json();
 
     if (!response.ok) {
-        console.error('Error updating student:', result); 
-        const errorMessage = result.message || 'Gagal memperbarui data murid.';
-        throw new Error(errorMessage);
+        throw new Error(result.message || 'Gagal memperbarui data murid.');
     }
     
     return result.student as Student;
@@ -137,18 +123,13 @@ export async function updateStudent(studentId: string, updateData: Partial<Omit<
 // 4. DELETE
 // =============================================================================
 export async function deleteStudent(studentId: string): Promise<void> {
-    
     const response = await fetch(`${API_BASE_URL}/${studentId}`, {
         method: 'DELETE',
-        // headers: { 'Authorization': `Bearer ${token}` }
+        headers: getHeaders(), // ✅ Pakai Token
     });
 
     if (!response.ok) {
         const result = await response.json();
-        const errorMessage = result.message || 'Gagal menghapus data murid.';
-        console.error("DELETE API Error:", result);
-        throw new Error(errorMessage);
+        throw new Error(result.message || 'Gagal menghapus data murid.');
     }
-    
-    return;
 }
