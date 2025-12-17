@@ -19,7 +19,7 @@ import { useLoading } from '@/context/LoadingContext'
 import { useUser } from '@/context/UserContext'
 
 // =============================================================================
-// KOMPONEN: STAT PILL (Kapsul Statistik)
+// KOMPONEN: STAT PILL
 // =============================================================================
 const StatPill = ({ icon: Icon, count, label, colorClass, iconColor }: any) => (
     <div className="bg-white px-5 py-3 rounded-xl shadow-sm border border-gray-100 flex items-center gap-3 min-w-[180px]">
@@ -34,7 +34,7 @@ const StatPill = ({ icon: Icon, count, label, colorClass, iconColor }: any) => (
 )
 
 // =============================================================================
-// KOMPONEN: MODAL FORM (Internal)
+// KOMPONEN: MODAL FORM
 // =============================================================================
 interface ModalProps {
     isOpen: boolean
@@ -66,7 +66,6 @@ function StudentModal({ isOpen, onClose, onSubmit, initialData }: ModalProps) {
                 status: initialData.status
             })
         } else {
-            // Reset form jika mode tambah
             setFormData({ name: '', age: '', phone_number: '', address: '', parent_name: '', parent_phone: '', status: 'AKTIF' })
         }
     }, [initialData, isOpen])
@@ -94,7 +93,6 @@ function StudentModal({ isOpen, onClose, onSubmit, initialData }: ModalProps) {
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-4">
-                    {/* Data Diri */}
                     <div>
                         <label className="block text-sm font-semibold text-gray-700 mb-1">Nama Lengkap</label>
                         <input required type="text" placeholder="Nama siswa" 
@@ -128,7 +126,6 @@ function StudentModal({ isOpen, onClose, onSubmit, initialData }: ModalProps) {
                         />
                     </div>
                     
-                    {/* Data Orang Tua */}
                     <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 mt-2">
                         <h4 className="text-xs font-bold text-[#0077AF] mb-3 uppercase tracking-wider flex items-center gap-2">
                             <User size={14}/> Data Orang Tua / Wali
@@ -191,18 +188,19 @@ export default function MuridPage() {
 
     // Hak Akses
     const role = user?.role || ''
-    const canEdit = ['OWNER', 'ADMIN'].includes(role) // Hanya Owner & Admin yg bisa edit
+    const canEdit = ['OWNER', 'ADMIN'].includes(role)
 
-    // 1. Fetch Data
+    // 1. Fetch Data (MENGGUNAKAN withLoading agar loading screen muncul)
     const fetchStudents = async () => {
-        // Jangan pakai withLoading di search agar UX lebih smooth (tidak blocking)
-        try {
-            const result = await getStudents(searchQuery)
-            setStudents(result.students || [])
-            setStats(result.stats || { active: 0, inactive: 0 })
-        } catch (err) {
-            console.error("Fetch Error:", err);
-        }
+        await withLoading(async () => {
+            try {
+                const result = await getStudents(searchQuery)
+                setStudents(result.students || [])
+                setStats(result.stats || { active: 0, inactive: 0 })
+            } catch (err) {
+                console.error("Fetch Error:", err);
+            }
+        })
     }
 
     // Effect Search (Debounce)
@@ -224,7 +222,7 @@ export default function MuridPage() {
                 }
                 setIsModalOpen(false)
                 setEditingStudent(null)
-                fetchStudents() // Refresh data
+                fetchStudents() 
             } catch (err: any) {
                 alert("Gagal menyimpan data: " + err.message)
             }
@@ -245,7 +243,6 @@ export default function MuridPage() {
         })
     }
 
-    // Helper Modal
     const openCreateModal = () => {
         setEditingStudent(null)
         setIsModalOpen(true)
@@ -311,63 +308,65 @@ export default function MuridPage() {
                         <thead className="bg-gray-50 text-gray-700 border-b border-gray-200">
                             <tr>
                                 <th className="px-6 py-4 font-bold text-sm">Nama Murid</th>
-                                <th className="px-6 py-4 font-bold text-sm">Usia</th>
+                                <th className="px-6 py-4 font-bold text-sm text-center">Usia</th>
                                 <th className="px-6 py-4 font-bold text-sm">Data Orang Tua</th>
-                                <th className="px-6 py-4 font-bold text-sm">Status</th>
+                                <th className="px-6 py-4 font-bold text-sm text-center">Status</th>
                                 {canEdit && <th className="px-6 py-4 font-bold text-sm text-center">Aksi</th>}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
                             {students.length === 0 ? (
                                 <tr>
-                                    <td colSpan={canEdit ? 5 : 4} className="p-12 text-center text-gray-400">
-                                        Data tidak ditemukan
+                                    <td colSpan={canEdit ? 5 : 4} className="p-12 text-center text-gray-400 font-medium">
+                                        Data tidak ditemukan atau belum ada murid terdaftar.
                                     </td>
                                 </tr>
-                            ) : students.map((m) => (
-                                <tr key={m.id} className="hover:bg-blue-50/50 transition-colors">
-                                    <td className="px-6 py-4">
-                                        <p className="font-bold text-gray-800">{m.name}</p>
-                                        <p className="text-xs text-gray-500">{m.phone_number || '-'}</p>
-                                        <p className="text-xs text-gray-400 mt-1">{m.address}</p>
-                                    </td>
-                                    <td className="px-6 py-4 text-sm text-gray-600">{m.age} Thn</td>
-                                    <td className="px-6 py-4">
-                                        <p className="text-sm font-medium text-gray-700">{m.parent_name}</p>
-                                        <div className="flex items-center gap-1 mt-1">
-                                            <span className="text-[10px] bg-green-100 text-green-700 px-1.5 rounded">WA</span>
-                                            <span className="text-xs text-blue-600">{m.parent_phone}</span>
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        <span className={`px-3 py-1 rounded-full text-[11px] font-bold text-white uppercase tracking-wider ${m.status === 'AKTIF' ? 'bg-[#5AB267]' : 'bg-[#FF0000]'}`}>
-                                            {m.status}
-                                        </span>
-                                    </td>
-                                    
-                                    {/* Kolom Aksi */}
-                                    {canEdit && (
+                            ) : (
+                                students.map((m) => (
+                                    <tr key={m.id} className="hover:bg-blue-50/50 transition-colors">
                                         <td className="px-6 py-4">
-                                            <div className="flex justify-center gap-2">
-                                                <button 
-                                                    onClick={() => openEditModal(m)} 
-                                                    className="p-2 text-gray-500 hover:text-[#0077AF] hover:bg-blue-100 rounded-lg transition"
-                                                    title="Edit Data"
-                                                >
-                                                    <Pencil size={18} />
-                                                </button>
-                                                <button 
-                                                    onClick={() => handleDelete(m.id, m.name)} 
-                                                    className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-100 rounded-lg transition"
-                                                    title="Hapus Data"
-                                                >
-                                                    <Trash2 size={18} />
-                                                </button>
+                                            <p className="font-bold text-gray-800">{m.name}</p>
+                                            <p className="text-xs text-gray-500 font-mono">{m.phone_number || '-'}</p>
+                                            <p className="text-xs text-gray-400 mt-1 line-clamp-1 italic">{m.address}</p>
+                                        </td>
+                                        <td className="px-6 py-4 text-sm text-gray-600 text-center font-medium">
+                                            {m.age} Thn
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <p className="text-sm font-semibold text-gray-700">{m.parent_name}</p>
+                                            <div className="flex items-center gap-1 mt-1">
+                                                <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-bold uppercase">WA</span>
+                                                <span className="text-xs text-[#0077AF] font-mono">{m.parent_phone}</span>
                                             </div>
                                         </td>
-                                    )}
-                                </tr>
-                            ))}
+                                        <td className="px-6 py-4 text-center">
+                                            <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest text-white shadow-sm ${m.status === 'AKTIF' ? 'bg-[#5AB267]' : 'bg-[#FF0000]'}`}>
+                                                {m.status}
+                                            </span>
+                                        </td>
+                                        {canEdit && (
+                                            <td className="px-6 py-4">
+                                                <div className="flex justify-center gap-2">
+                                                    <button 
+                                                        onClick={() => openEditModal(m)} 
+                                                        className="p-2 text-yellow-600 hover:bg-yellow-50 rounded-lg transition-all"
+                                                        title="Edit Data"
+                                                    >
+                                                        <Pencil size={18} />
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => handleDelete(m.id, m.name)} 
+                                                        className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                                                        title="Hapus Data"
+                                                    >
+                                                        <Trash2 size={18} />
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        )}
+                                    </tr>
+                                ))
+                            )}
                         </tbody>
                     </table>
                 </div>

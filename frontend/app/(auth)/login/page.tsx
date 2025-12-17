@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Input from '../../../components/Input'
 import Button from '../../../components/Button'
 import { useUser } from '@/context/UserContext'
-import { useLoading } from '@/context/LoadingContext' // ✅ 1. Import Global Loading
+import { useLoading } from '@/context/LoadingContext' // ✅ Import Global Loading
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'
 
@@ -21,21 +21,17 @@ function roleToPath(role: string) {
 export default function Page() {
   const router = useRouter()
   const { login } = useUser()
-  const { withLoading } = useLoading() // ✅ 2. Gunakan Hook Loading
+  const { withLoading } = useLoading() // ✅ Gunakan Hook Global
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
-  
-  // ❌ State loading lokal dihapus karena sudah pakai global
-  // const [loading, setLoading] = useState(false) 
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
 
-    // ✅ 3. Bungkus proses dengan withLoading
-    // Layar akan otomatis blur dan animasi loading muncul
+    // ✅ Bungkus proses login dengan withLoading
     await withLoading(async () => {
       try {
         const res = await fetch(`${API}/api/auth/login`, {
@@ -47,15 +43,13 @@ export default function Page() {
         
         if (!res.ok) throw new Error(data?.error || 'Login failed')
 
-        // Simpan sesi user ke context
+        // Simpan sesi
         login({ user: data.user, session: data.session })
 
-        // Redirect ke halaman sesuai role
-        // Loading screen akan tetap muncul sebentar sampai halaman berpindah
+        // Redirect
         router.push(roleToPath(data.user.role))
         
       } catch (err: any) {
-        // Jika error, loading otomatis mati (handled by context), lalu kita set pesan error
         setError(err.message || String(err))
       }
     })
@@ -100,7 +94,6 @@ export default function Page() {
 
           <div className="flex justify-center mt-6">
             <Button type="submit">
-               {/* Teks tombol statis saja, karena loading screen akan menutupi seluruh layar */}
                Masuk
             </Button>
           </div>

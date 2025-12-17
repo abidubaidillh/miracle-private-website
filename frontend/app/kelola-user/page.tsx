@@ -6,6 +6,8 @@ import { getUserRole } from '@/lib/auth'
 import { useRouter } from 'next/navigation'
 import { useLoading } from '@/context/LoadingContext'
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api'
+
 export default function KelolaUserPage() {
     const [currentUserRole, setCurrentUserRole] = useState<string | null>(null)
     const router = useRouter()
@@ -19,7 +21,7 @@ export default function KelolaUserPage() {
         phone_number: '',
         birthday: '',
         role: 'MENTOR',
-        subjects: '',
+        subjects: '', 
         salary_per_session: '' 
     })
 
@@ -37,11 +39,10 @@ export default function KelolaUserPage() {
 
         await withLoading(async () => {
             try {
-                // ✅ UPDATE: Admin DIPERBOLEHKAN kirim gaji saat buat akun
-                // Kita tidak lagi memaksa salary = '0' jika user bukan Owner.
+                // Payload dikirim persis seperti form
                 const payload = { ...form }
 
-                const res = await fetch('http://localhost:4000/api/auth/register-internal', {
+                const res = await fetch(`${API_URL}/auth/register-internal`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload),
@@ -70,7 +71,6 @@ export default function KelolaUserPage() {
 
     if (currentUserRole !== 'OWNER' && currentUserRole !== 'ADMIN') return null
 
-    // Helper Boolean
     const isOwner = currentUserRole === 'OWNER'
 
     return (
@@ -132,14 +132,9 @@ export default function KelolaUserPage() {
                             </div>
 
                             <div>
-                                <label className="block text-xs font-semibold text-gray-600 mb-1">
-                                    Gaji Awal Per Sesi (Rp)
-                                    {/* ✅ Hapus label (Owner Only) karena Admin sekarang boleh isi awal */}
-                                </label>
+                                <label className="block text-xs font-semibold text-gray-600 mb-1">Gaji Awal Per Sesi (Rp)</label>
                                 <input 
                                     type="number" name="salary_per_session" value={form.salary_per_session} onChange={handleChange}
-                                    // ✅ Disabled dihapus: Admin & Owner BISA input saat pembuatan
-                                    disabled={false} 
                                     className="w-full p-2 border rounded-lg text-sm focus:ring-2 focus:ring-[#0077AF] outline-none" 
                                     placeholder="Contoh: 50000"
                                 />

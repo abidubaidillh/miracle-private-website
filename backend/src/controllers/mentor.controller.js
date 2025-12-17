@@ -1,12 +1,13 @@
 // src/controllers/mentor.controller.js
-
 const supabase = require('../config/supabase')
 
-// A. GET (READ)
+// A. GET (READ) - Ambil Data Mentor
 const getAllMentor = async (req, res) => {
   const { status, search } = req.query
-  const userRole = req.user.role
-  const userId = req.user.id
+  
+  // Pastikan req.user ada (mencegah crash jika middleware auth error/bypass)
+  const userRole = req.user ? req.user.role : null
+  const userId = req.user ? req.user.id : null
 
   try {
     let query = supabase
@@ -14,47 +15,66 @@ const getAllMentor = async (req, res) => {
       .select('*')
       .order('name', { ascending: true })
 
-    // 🔐 MENTOR hanya lihat dirinya sendiri
+    // 🔐 FILTER: Jika yang login MENTOR, hanya tampilkan data dirinya sendiri
     if (userRole === 'MENTOR') {
-      query = query.eq('id', userId) // Asumsi ID di mentors = ID user auth
+      query = query.eq('id', userId) 
     }
 
-    if (status && ['AKTIF', 'NON-AKTIF'].includes(status)) {
-      query = query.eq('status', status)
+    // Filter Status
+    if (status && ['AKTIF', 'NON-AKTIF'].includes(status.toUpperCase())) {
+      query = query.eq('status', status.toUpperCase())
     }
 
+    // Filter Pencarian 
+    // Mencari di kolom: name, email, phone_number, atau subject
     if (search) {
-      query = query.or(`name.ilike.%${search}%,phone_number.ilike.%${search}%`)
+      query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%,phone_number.ilike.%${search}%,subject.ilike.%${search}%`)
     }
 
     const { data: mentors, error } = await query
+    
     if (error) throw error
 
+    // Kembalikan dengan key 'mentors' agar cocok dengan frontend
     return res.status(200).json({ mentors })
+
   } catch (err) {
+    console.error("Get Mentor Error:", err)
     return res.status(500).json({ message: 'Gagal mengambil data mentor', error: err.message })
   }
 }
 
-// B. POST (CREATE)
+// B. POST (CREATE) - Tambah Mentor Baru
 const createMentor = async (req, res) => {
-  const { name, phone_number, address, expertise, salary_per_session, status, user_id } = req.body
+  // Tangkap variasi nama variabel (jaga-jaga frontend kirim 'expertise' atau 'phone')
+  const { name, email, phone, phone_number, address, subject, expertise, salary_per_session, status } = req.body
 
-  // Jika Admin yang buat, salary mungkin 0 atau null, itu OK.
-  const salary = salary_per_session ? parseInt(salary_per_session) : 0
+  // 1. Standarisasi Input
+  // Prioritaskan input, fallback ke string kosong atau nilai default
+  const finalPhone = phone_number || phone || ''
+  const finalSubject = subject || expertise || 'UMUM' 
+  const finalSalary = salary_per_session ? parseInt(salary_per_session) : 0
+
+  // Validasi Wajib
+  if (!name || !email) {
+    return res.status(400).json({ message: "Nama dan Email wajib diisi." })
+  }
 
   try {
     const { data, error } = await supabase
       .from('mentors')
       .insert([{
         name,
-        phone_number,
+        email,
+        // Pastikan key ini sesuai nama kolom di DB (phone_number)
+        phone_number: finalPhone, 
         address,
-        expertise,
-        salary_per_session: salary,
+        
+        // Pastikan key ini sesuai nama kolom di DB (subject)
+        subject: finalSubject, 
+        
+        salary_per_session: finalSalary,
         status: status?.toUpperCase() || 'AKTIF',
-        // Jika user_id dikirim (manual linking), pakai itu. Jika tidak, biarkan null (atau create user auth dulu terpisah)
-        user_id: user_id || null 
       }])
       .select()
       .single()
@@ -62,26 +82,55 @@ const createMentor = async (req, res) => {
     if (error) throw error
 
     return res.status(201).json({ message: 'Mentor berhasil ditambahkan', mentor: data })
+
   } catch (err) {
+    // Error kode unik (biasanya email duplicate)
+    if (err.code === '23505') { 
+        return res.status(400).json({ message: 'Email mentor sudah terdaftar.' })
+    }
+    console.error("Create Mentor Error:", err)
     return res.status(500).json({ message: 'Gagal menambahkan mentor', error: err.message })
   }
 }
 
-// C. PUT (UPDATE) - 🛡️ DENGAN PROTEKSI
+// C. PUT (UPDATE) - Edit Data Mentor
 const updateMentor = async (req, res) => {
   const { id } = req.params
-  const userRole = req.user.role // Didapat dari authMiddleware
+  const userRole = req.user ? req.user.role : null
+  const userId = req.user ? req.user.id : null
+  
+  // Salin body agar aman dimodifikasi
   const updateData = { ...req.body }
 
-  // 🛡️ SECURITY: Hapus field gaji jika bukan OWNER
-  if (userRole !== 'OWNER') {
+  // --- MAPPING INPUT KE KOLOM DB ---
+  
+  // 1. Mapping Expertise -> Subject
+  if (updateData.expertise) {
+      updateData.subject = updateData.expertise;
+      delete updateData.expertise; 
+  }
+
+  // 2. Mapping Phone -> Phone Number
+  if (updateData.phone) {
+      updateData.phone_number = updateData.phone;
+      delete updateData.phone;
+  }
+
+  // 🛡️ SECURITY CHECK
+  // 1. Mentor hanya boleh edit profil sendiri
+  if (userRole === 'MENTOR' && id !== userId) {
+      return res.status(403).json({ message: "Akses ditolak." })
+  }
+
+  // 2. Hanya Owner/Bendahara yang boleh ubah gaji
+  const allowedFinancialRoles = ['OWNER', 'BENDAHARA']
+  if (userRole && !allowedFinancialRoles.includes(userRole)) {
       if (updateData.salary_per_session !== undefined) {
-          console.warn(`[Security] User ${req.user.email} mencoba ubah gaji. Dibatalkan.`)
           delete updateData.salary_per_session
       }
   }
 
-  // Validasi Status
+  // Standarisasi Status
   if (updateData.status) {
     updateData.status = updateData.status.toUpperCase()
   }
@@ -98,6 +147,7 @@ const updateMentor = async (req, res) => {
 
     return res.status(200).json({ message: 'Mentor berhasil diperbarui', mentor: data })
   } catch (err) {
+    console.error("Update Mentor Error:", err)
     return res.status(500).json({ message: 'Gagal update mentor', error: err.message })
   }
 }
