@@ -39,12 +39,20 @@ export default function JadwalPage() {
 
     const canEdit = role === 'OWNER' || role === 'ADMIN';
 
+    // Helper format tanggal (Opsional, untuk tampilan lebih bagus)
+    const formatDate = (dateStr: string) => {
+        if(!dateStr) return '-';
+        const date = new Date(dateStr);
+        return date.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    }
+
     return (
         <DashboardLayout title="Jadwal Kelas">
             <div className="flex justify-between items-center mb-6">
                 <div className="flex items-center gap-2 text-gray-600">
                     <Calendar />
-                    <span className="font-medium">Jadwal Rutin Mingguan</span>
+                    {/* Ubah text judul */}
+                    <span className="font-medium">Jadwal Sesi Kelas</span>
                 </div>
                 {canEdit && (
                     <button onClick={() => setIsModalOpen(true)} className="bg-[#0077AF] text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 text-sm hover:bg-[#006699]">
@@ -58,7 +66,7 @@ export default function JadwalPage() {
                 <table className="w-full text-left">
                     <thead className="bg-gray-50 border-b">
                         <tr>
-                            <th className="px-6 py-4 text-sm font-bold text-gray-700">Hari & Jam</th>
+                            <th className="px-6 py-4 text-sm font-bold text-gray-700">Tanggal & Jam</th>
                             <th className="px-6 py-4 text-sm font-bold text-gray-700">Murid</th>
                             <th className="px-6 py-4 text-sm font-bold text-gray-700">Mentor</th>
                             <th className="px-6 py-4 text-sm font-bold text-gray-700">Mapel</th>
@@ -69,20 +77,20 @@ export default function JadwalPage() {
                         {loading ? (
                              <tr><td colSpan={5} className="p-8 text-center text-gray-500"><Loader2 className="inline animate-spin"/> Memuat...</td></tr>
                         ) : schedules.length === 0 ? (
-                             <tr><td colSpan={5} className="p-8 text-center text-gray-400">Belum ada jadwal.</td></tr>
+                             <tr><td colSpan={5} className="p-8 text-center text-gray-400">Belum ada jadwal sesi.</td></tr>
                         ) : (
                             schedules.map((s) => (
                                 <tr key={s.id} className="hover:bg-gray-50">
                                     <td className="px-6 py-4">
-                                        <div className="font-bold text-gray-800">{s.day_of_week}</div>
+                                        {/* ✅ PERBAIKAN: Menampilkan Tanggal (date) */}
+                                        <div className="font-bold text-gray-800">{formatDate(s.date)}</div>
                                         <div className="text-sm text-gray-500">{s.start_time.slice(0,5)} - {s.end_time.slice(0,5)}</div>
                                     </td>
                                     <td className="px-6 py-4 font-medium text-gray-700">{s.students?.name || '-'}</td>
                                     <td className="px-6 py-4 text-gray-600">
                                         <div className="flex items-center gap-2">
                                             <User size={14} className="text-gray-400"/>
-                                            {/* ✅ PERBAIKAN: Akses mentors.name */}
-                                            {(s as any).mentors?.name || (s as any).mentors?.username || '-'}
+                                            {(s as any).mentors?.name || '-'}
                                         </div>
                                     </td>
                                     <td className="px-6 py-4">

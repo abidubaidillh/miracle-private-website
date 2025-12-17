@@ -15,7 +15,8 @@ const muridRoutes = require('./routes/murid.routes')
 const mentorRoutes = require('./routes/mentor.routes') 
 const paketRoutes = require('./routes/paket.routes')
 const jadwalRoutes = require('./routes/jadwal.routes') 
-const paymentRoutes = require('./routes/payment.routes') // ✅ [BARU] Import Route Pembayaran
+const paymentRoutes = require('./routes/payment.routes')
+const absensiRoutes = require('./routes/absensi.routes') // ✅ [BARU] Import Route Absensi
 
 // ==========================================================
 // Middleware Utama
@@ -89,12 +90,20 @@ try {
     console.error('❌ Failed to mount jadwalRoutes:', e.message)
 }
 
-// 6. Pembayaran / Payments (✅ BAGIAN INI DITAMBAHKAN)
+// 6. Pembayaran / Payments
 try {
     app.use('/api/payments', paymentRoutes)
     console.log('✅ Payment Routes mounted at /api/payments')
 } catch (e) {
     console.error('❌ Failed to mount paymentRoutes:', e.message)
+}
+
+// 7. Absensi / Attendance (✅ BAGIAN INI DITAMBAHKAN)
+try {
+    app.use('/api/attendance', absensiRoutes)
+    console.log('✅ Absensi Routes mounted at /api/attendance')
+} catch (e) {
+    console.error('❌ Failed to mount absensiRoutes:', e.message)
 }
 
 // ==========================================================
