@@ -1,59 +1,50 @@
 // src/routes/mentor.routes.js
-
 const express = require('express')
 const router = express.Router()
 
 const mentorController = require('../controllers/mentor.controller')
+
+// 🔥 PERBAIKAN: Hapus kurung kurawal { } agar sesuai dengan auth.middleware.js baru
 const authMiddleware = require('../middlewares/auth.middleware')
+
+// Pastikan role middleware di-import dengan benar (sesuaikan dengan file aslinya)
 const allowedRoles = require('../middlewares/role.middleware')
 
-// =======================================================
-// GET /api/mentors
-// OWNER, ADMIN, BENDAHARA, MENTOR
-// NOTE:
-// - Mentor HANYA boleh melihat data dirinya sendiri
-// - Filtering mentor dilakukan di controller (berdasarkan req.user)
-// =======================================================
+// Gunakan Auth Middleware
+router.use(authMiddleware)
+
+// 1. GET /api/mentors/me
+router.get(
+  '/me',
+  allowedRoles(['MENTOR', 'OWNER', 'ADMIN']),
+  mentorController.getMyProfile
+)
+
+// 2. GET /api/mentors
 router.get(
   '/',
-  authMiddleware,
   allowedRoles(['OWNER', 'ADMIN', 'BENDAHARA', 'MENTOR']),
   mentorController.getAllMentor
 )
 
-// =======================================================
-// POST /api/mentors
-// OWNER & ADMIN
-// =======================================================
+// 3. POST /api/mentors
 router.post(
   '/',
-  authMiddleware,
   allowedRoles(['OWNER', 'ADMIN']),
   mentorController.createMentor
 )
 
-// =======================================================
-// PUT /api/mentors/:id
-// OWNER & ADMIN
-// NOTE:
-// - ADMIN TIDAK BOLEH mengubah salary_per_session
-// - Validasi dilakukan di controller
-// =======================================================
+// 4. PUT /api/mentors/:id
 router.put(
   '/:id',
-  authMiddleware,
-  allowedRoles(['OWNER', 'ADMIN']),
+  allowedRoles(['OWNER', 'ADMIN', 'MENTOR']),
   mentorController.updateMentor
 )
 
-// =======================================================
-// DELETE /api/mentors/:id
-// OWNER ONLY
-// =======================================================
+// 5. DELETE /api/mentors/:id
 router.delete(
   '/:id',
-  authMiddleware,
-  allowedRoles('OWNER'),
+  allowedRoles(['OWNER', 'ADMIN']),
   mentorController.deleteMentor
 )
 

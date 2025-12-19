@@ -5,15 +5,12 @@ import DashboardLayout from '@/components/DashboardLayout'
 import { useRouter } from 'next/navigation'
 import { 
     Calendar, CheckCircle, AlertCircle, CreditCard, 
-    Wallet, UploadCloud, X, Lock, Eye, Download, Loader2
+    Wallet, UploadCloud, X, Lock, Eye, Download, Loader2, DollarSign
 } from 'lucide-react'
 import { useUser } from '@/context/UserContext'
 import { useLoading } from '@/context/LoadingContext'
-import { getSalaries, saveSalaryDraft, paySalary } from '@/lib/salaryActions'
-import { getAuthToken } from '@/lib/auth' // ✅ IMPORT PENTING
-
-// 🔥 Definisi URL API
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api'
+// ✅ Import action sesuai dengan struktur file salaryActions.ts
+import { getSalaries, getMySalaries, saveSalaryDraft, paySalary } from '@/lib/salaryActions'
 
 // --- HELPER FORMAT RUPIAH ---
 const formatRupiah = (num: number) => {
@@ -50,7 +47,7 @@ const ViewProofModal = ({ isOpen, onClose, imageUrl, mentorName }: any) => {
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[60] backdrop-blur-sm p-4 animate-fade-in" onClick={onClose}>
             <div className="bg-white rounded-xl max-w-lg w-full overflow-hidden shadow-2xl relative" onClick={e => e.stopPropagation()}>
                 <div className="p-4 border-b flex justify-between items-center bg-gray-50">
-                    <h3 className="font-bold text-gray-800">Bukti Transfer: {mentorName}</h3>
+                    <h3 className="font-bold text-gray-800">Bukti Transfer: {mentorName || 'Saya'}</h3>
                     <button onClick={onClose}><X size={20} className="text-gray-500 hover:text-red-500"/></button>
                 </div>
                 <div className="p-4 bg-gray-200 flex justify-center">
@@ -76,7 +73,7 @@ const PayModal = ({ isOpen, onClose, onConfirm, salaryData, isUploading }: any) 
 
     const handleSubmit = () => {
         if (!proof) return alert("Harap sertakan bukti pembayaran (foto/screenshot)!")
-        onConfirm(salaryData.id, proof)
+        onConfirm(salaryData.id || salaryData.mentor_id, proof)
     }
 
     return (
@@ -139,13 +136,9 @@ const PayModal = ({ isOpen, onClose, onConfirm, salaryData, isUploading }: any) 
                         `}
                     >
                         {isUploading ? (
-                            <>
-                                <Loader2 className="animate-spin" size={18}/> Mengupload...
-                            </>
+                            <><Loader2 className="animate-spin" size={18}/> Mengupload...</>
                         ) : (
-                            <>
-                                <CreditCard size={18} /> Proses Bayar Sekarang
-                            </>
+                            <><CreditCard size={18} /> Proses Bayar Sekarang</>
                         )}
                     </button>
                 </div>
@@ -163,7 +156,7 @@ export default function GajiMentorPage() {
     const [month, setMonth] = useState(new Date().getMonth() + 1)
     const [year, setYear] = useState(new Date().getFullYear())
     const [salaries, setSalaries] = useState<any[]>([])
-    const [stats, setStats] = useState({ total_gaji: 0, sudah_dibayar: 0, belum_dibayar: 0, count_paid: 0, count_pending: 0 })
+    const [stats, setStats] = useState({ total_gaji: 0, sudah_dibayar: 0, belum_dibayar: 0, total_paid: 0 })
     
     // State UI
     const [payModalOpen, setPayModalOpen] = useState(false)
@@ -171,29 +164,35 @@ export default function GajiMentorPage() {
     const [selectedSalary, setSelectedSalary] = useState<any>(null)
     const [isUploading, setIsUploading] = useState(false)
 
-    useEffect(() => {
-        if (user) {
-            const allowed = ['OWNER', 'BENDAHARA', 'ADMIN']
-            if (!allowed.includes(user.role)) router.push('/dashboard')
-        }
-    }, [user, router])
-
-    const canEdit = user && ['OWNER', 'BENDAHARA'].includes(user.role)
+    // Cek Role
+    const role = user?.role || ''
+    const isMentor = role === 'MENTOR'
+    const canEdit = ['OWNER', 'BENDAHARA'].includes(role)
 
     const fetchData = async () => {
         await withLoading(async () => {
             try {
-                const res = await getSalaries(month, year)
+                let res;
+                if (isMentor) {
+                    res = await getMySalaries()
+                } else {
+                    res = await getSalaries(month, year)
+                }
+                
                 setSalaries(res.salaries || [])
-                setStats(res.stats || { total_gaji: 0, sudah_dibayar: 0, belum_dibayar: 0, count_paid: 0, count_pending: 0 })
-            } catch (err) { console.error(err) }
+                setStats(res.stats || { total_gaji: 0, sudah_dibayar: 0, belum_dibayar: 0, total_paid: 0 })
+                
+            } catch (err: any) { 
+                console.error("Fetch Error:", err.message)
+            }
         })
     }
 
-    useEffect(() => { if(user) fetchData() }, [user, month, year])
+    useEffect(() => {
+        if(user) fetchData()
+    }, [user, month, year])
 
     const handleUpdateBonus = async (item: any, newBonus: string) => {
-        // Parse & Validasi
         const cleanBonus = parseInt(newBonus.replace(/\D/g, '')) || 0
         if (cleanBonus === item.bonus) return
 
@@ -205,52 +204,28 @@ export default function GajiMentorPage() {
                     year: parseInt(year.toString()),
                     total_sessions: parseInt(item.total_sessions) || 0,
                     salary_per_session: parseInt(item.salary_per_session) || 0,
-                    bonus: cleanBonus
+                    bonus: cleanBonus,
+                    deduction: item.deduction || 0
                 })
                 fetchData()
-            } catch (e) { alert("Gagal update bonus") }
+            } catch (e) { 
+                alert("Gagal update bonus") 
+            }
         })
     }
 
-    // --- HANDLE CONFIRM PAY ---
     const handleConfirmPay = async (id: string, proofFile: File) => {
         setIsUploading(true)
         try {
-            // 1. Upload ke Storage (Mock dulu)
             const proofUrl = await mockUploadService(proofFile)
-            
-            // 2. Ambil Token dengan Helper yang BENAR
-            const token = getAuthToken() 
-            
-            if (!token) {
-                alert("Sesi Anda habis. Harap login ulang.")
-                router.push('/login')
-                return
-            }
-
-            // 3. Kirim ke API
-            const res = await fetch(`${API_URL}/salaries/${id}/pay`, {
-                method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}` // Kirim Token yang valid
-                },
-                body: JSON.stringify({ proof_image: proofUrl }) 
-            })
-
-            const resData = await res.json()
-
-            if (!res.ok) {
-                throw new Error(resData.error || "Gagal konfirmasi pembayaran di server")
-            }
+            // ✅ Menggunakan proofUrl hasil mock service
+            await paySalary(id, proofUrl)
             
             setPayModalOpen(false)
             setSelectedSalary(null)
             fetchData()
             alert("Pembayaran Berhasil Dicatat!")
-
         } catch (e: any) { 
-            console.error(e)
             alert("Error: " + e.message) 
         } finally {
             setIsUploading(false)
@@ -259,7 +234,7 @@ export default function GajiMentorPage() {
 
     const openViewProof = (salary: any) => {
         if (!salary.proof_image) {
-            alert("Bukti transfer tidak ditemukan / belum diupload.")
+            alert("Bukti transfer tidak ditemukan.")
             return
         }
         setSelectedSalary(salary)
@@ -269,69 +244,78 @@ export default function GajiMentorPage() {
     if (!user) return null
 
     return (
-        <DashboardLayout title="Penggajian Mentor">
+        <DashboardLayout title={isMentor ? "Riwayat Gaji Saya" : "Penggajian Mentor"}>
             
-            {/* Filter */}
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-6 flex flex-wrap items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2 text-gray-700 font-bold bg-gray-50 px-3 py-1.5 rounded-lg border">
-                        <Calendar size={18} className="text-[#0077AF]" />
-                        <span>Periode:</span>
+            {!isMentor && (
+                <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-6 flex flex-wrap items-center justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-2 text-gray-700 font-bold bg-gray-50 px-3 py-1.5 rounded-lg border">
+                            <Calendar size={18} className="text-[#0077AF]" />
+                            <span>Periode:</span>
+                        </div>
+                        <select value={month} onChange={(e) => setMonth(parseInt(e.target.value))} className="bg-white border rounded p-2 outline-none focus:ring-2 focus:ring-[#0077AF]">
+                            {[...Array(12)].map((_, i) => <option key={i+1} value={i+1}>Bulan {i+1}</option>)}
+                        </select>
+                        <select value={year} onChange={(e) => setYear(parseInt(e.target.value))} className="bg-white border rounded p-2 outline-none focus:ring-2 focus:ring-[#0077AF]">
+                            <option value="2024">2024</option>
+                            <option value="2025">2025</option>
+                        </select>
                     </div>
-                    <select value={month} onChange={(e) => setMonth(parseInt(e.target.value))} className="bg-white border rounded p-2 outline-none focus:ring-2 focus:ring-[#0077AF] transition-all hover:border-[#0077AF]">
-                        {[...Array(12)].map((_, i) => <option key={i+1} value={i+1}>Bulan {i+1}</option>)}
-                    </select>
-                    <select value={year} onChange={(e) => setYear(parseInt(e.target.value))} className="bg-white border rounded p-2 outline-none focus:ring-2 focus:ring-[#0077AF] transition-all hover:border-[#0077AF]">
-                        <option value="2024">2024</option>
-                        <option value="2025">2025</option>
-                    </select>
                 </div>
-            </div>
+            )}
 
-            {/* Stats */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                <StatCard title="Total Gaji" value={formatRupiah(stats.total_gaji)} subtext="Estimasi Pengeluaran" colorClass="bg-[#0077AF] text-white border-blue-800" icon={Wallet}/>
-                <StatCard title="Sudah Dibayar" value={formatRupiah(stats.sudah_dibayar)} subtext="Lunas" colorClass="bg-green-100 text-green-800 border-green-200" icon={CheckCircle}/>
-                <StatCard title="Belum Dibayar" value={formatRupiah(stats.belum_dibayar)} subtext="Pending" colorClass="bg-red-50 text-red-800 border-red-200" icon={AlertCircle}/>
+                <StatCard 
+                    title={isMentor ? "Total Pendapatan" : "Total Gaji"} 
+                    value={formatRupiah(isMentor ? stats.total_paid : stats.total_gaji)} 
+                    subtext={isMentor ? "Diterima" : "Estimasi Pengeluaran"} 
+                    colorClass="bg-[#0077AF] text-white border-blue-800" 
+                    icon={Wallet}
+                />
+                {!isMentor && (
+                    <>
+                        <StatCard title="Sudah Dibayar" value={formatRupiah(stats.sudah_dibayar)} subtext="Lunas" colorClass="bg-green-100 text-green-800 border-green-200" icon={CheckCircle}/>
+                        <StatCard title="Belum Dibayar" value={formatRupiah(stats.total_gaji - stats.sudah_dibayar)} subtext="Pending" colorClass="bg-red-50 text-red-800 border-red-200" icon={AlertCircle}/>
+                    </>
+                )}
             </div>
 
-            {/* Tabel */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                 <table className="w-full text-left">
                     <thead className="bg-gray-50 text-gray-700 border-b">
                         <tr>
-                            <th className="px-6 py-4 font-bold text-sm">Nama Mentor</th>
+                            {!isMentor && <th className="px-6 py-4 font-bold text-sm">Nama Mentor</th>}
                             <th className="px-6 py-4 font-bold text-sm">Rate / Sesi</th>
-                            <th className="px-6 py-4 font-bold text-sm text-center bg-gray-50/50">Target</th>
-                            <th className="px-6 py-4 font-bold text-sm text-center bg-blue-50/30">Terlaksana</th>
+                            <th className="px-6 py-4 font-bold text-sm text-center bg-blue-50/30">Total Sesi</th>
                             <th className="px-6 py-4 font-bold text-sm w-32">Bonus (Rp)</th>
-                            <th className="px-6 py-4 font-bold text-sm">Total Terima</th>
+                            <th className="px-6 py-4 font-bold text-sm text-right">Total Terima</th>
                             <th className="px-6 py-4 font-bold text-sm text-center">Status</th>
                             <th className="px-6 py-4 font-bold text-sm text-center">Aksi</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                         {salaries.length === 0 ? (
-                            <tr><td colSpan={8} className="p-12 text-center text-gray-400 font-medium">Tidak ada data mentor aktif.</td></tr>
+                            <tr><td colSpan={isMentor ? 6 : 7} className="p-12 text-center text-gray-400 font-medium">Tidak ada data gaji.</td></tr>
                         ) : salaries.map((s) => {
                             const isPaid = s.status === 'PAID'
                             
                             return (
-                                <tr key={s.mentor_id} className="hover:bg-gray-50 transition-colors">
-                                    <td className="px-6 py-4 font-bold text-gray-800">{s.mentor_name}</td>
+                                <tr key={s.mentor_id || s.id} className="hover:bg-gray-50 transition-colors">
+                                    {!isMentor && <td className="px-6 py-4 font-bold text-gray-800">{s.mentor_name}</td>}
                                     <td className="px-6 py-4 text-sm text-gray-600 font-mono">{formatRupiah(s.salary_per_session)}</td>
-                                    <td className="px-6 py-4 text-center text-gray-500 font-medium bg-gray-50/50">{s.target_sessions || 0}</td>
                                     <td className="px-6 py-4 text-center font-bold text-[#0077AF] bg-blue-50/30">
                                         <div className="flex items-center justify-center gap-1">{s.total_sessions} <Lock size={12} className="text-gray-400" /></div>
                                     </td>
                                     <td className="px-6 py-4">
                                         <input 
-                                            type="number" defaultValue={s.bonus} disabled={isPaid || !canEdit}
-                                            className={`w-28 border rounded-lg p-1.5 font-mono text-sm outline-none focus:ring-2 focus:ring-[#0077AF] transition-all ${isPaid ? 'bg-gray-100 text-gray-400 border-transparent' : 'bg-white border-gray-300'}`}
+                                            type="number" 
+                                            defaultValue={s.bonus} 
+                                            disabled={isPaid || !canEdit}
+                                            className={`w-28 border rounded-lg p-1.5 font-mono text-sm outline-none focus:ring-2 focus:ring-[#0077AF] transition-all ${isPaid || !canEdit ? 'bg-gray-100 text-gray-400 border-transparent' : 'bg-white border-gray-300'}`}
                                             onBlur={(e) => canEdit && !isPaid && handleUpdateBonus(s, e.target.value)}
                                         />
                                     </td>
-                                    <td className="px-6 py-4 font-mono font-black text-[#0077AF] text-base">{formatRupiah(s.total_amount)}</td>
+                                    <td className="px-6 py-4 font-mono font-black text-[#0077AF] text-base text-right">{formatRupiah(s.total_amount)}</td>
                                     <td className="px-6 py-4 text-center">
                                         {isPaid ? (
                                             <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider inline-flex items-center gap-1 shadow-sm">
@@ -345,16 +329,12 @@ export default function GajiMentorPage() {
                                     </td>
                                     <td className="px-6 py-4 text-center">
                                         {canEdit && !isPaid ? (
-                                            s.id ? (
-                                                <button onClick={() => { setSelectedSalary(s); setPayModalOpen(true); }} className="bg-[#0077AF] hover:bg-[#006699] text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 mx-auto shadow-md hover:shadow-lg transition-all">
-                                                    <CreditCard size={14}/> Bayar
-                                                </button>
-                                            ) : (
-                                                <span className="text-xs text-gray-400 italic font-medium">Auto-Draft</span>
-                                            )
+                                            <button onClick={() => { setSelectedSalary(s); setPayModalOpen(true); }} className="bg-[#0077AF] hover:bg-[#006699] text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 mx-auto shadow-md hover:shadow-lg transition-all">
+                                                <CreditCard size={14}/> Bayar
+                                            </button>
                                         ) : isPaid ? (
                                             <button onClick={() => openViewProof(s)} className="text-green-600 font-bold text-xs hover:underline flex items-center justify-center gap-1 mx-auto">
-                                                <Eye size={14}/> Lihat Bukti
+                                                <Eye size={14}/> Bukti
                                             </button>
                                         ) : ( <span className="text-xs text-gray-400">-</span> )}
                                     </td>
@@ -379,7 +359,6 @@ export default function GajiMentorPage() {
                 imageUrl={selectedSalary?.proof_image}
                 mentorName={selectedSalary?.mentor_name}
             />
-
         </DashboardLayout>
     )
 }

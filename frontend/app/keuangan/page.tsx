@@ -9,81 +9,102 @@ import {
     Wallet, 
     ArrowUpRight, 
     ArrowDownLeft,
-    Filter
+    Filter,
+    AlertCircle
 } from 'lucide-react'
 import { useUser } from '@/context/UserContext'
 import { useLoading } from '@/context/LoadingContext'
-import { getFinanceSummary } from '@/lib/financeActions'
+import { getAuthToken } from '@/lib/auth'
 
-// Format Rupiah Helper
-const formatRupiah = (num: number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(num)
+// Helper Format Rupiah (Ditambah pengaman || 0 agar tidak NaN)
+const formatRupiah = (num: number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(num || 0)
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'
+
+const getFinanceSummary = async () => {
+    const token = getAuthToken()
+    const res = await fetch(`${API_BASE_URL}/api/finance/summary`, {
+        headers: { Authorization: `Bearer ${token}` }
+    })
+    if (!res.ok) throw new Error("Gagal mengambil data keuangan")
+    return res.json()
+}
 
 export default function KeuanganPage() {
     const { user } = useUser()
     const { withLoading } = useLoading()
     const router = useRouter()
 
-    const [stats, setStats] = useState({ totalIncome: 0, totalExpense: 0, netBalance: 0 })
-    const [history, setHistory] = useState<any[]>([])
+    // State awal disesuaikan dengan key dari backend
+    const [stats, setStats] = useState({ 
+        totalIncome: 0, 
+        totalExpense: 0, 
+        netBalance: 0,
+        unpaid_invoices: 0, 
+        unpaid_salaries: 0  
+    })
+    
+    const [history, setHistory] = useState<any[]>([]) 
 
-    // 1. Cek Role (UPDATE: Menambahkan ADMIN agar tidak ditendang ke dashboard)
     useEffect(() => {
         if (user) {
-            const allowedRoles = ['OWNER', 'BENDAHARA', 'ADMIN'] // ✅ Admin ditambahkan
+            const allowedRoles = ['OWNER', 'BENDAHARA'] 
             if (!allowedRoles.includes(user.role)) {
                 router.push('/dashboard')
             }
         }
     }, [user, router])
 
-    // 2. Load Data
     useEffect(() => {
         const loadData = async () => {
             if (!user) return
-
             await withLoading(async () => {
                 try {
                     const data = await getFinanceSummary()
-                    setStats(data.stats)
-                    setHistory(data.history)
+                    // Backend mengirim objek { stats: {...}, history: [...] }
+                    if (data.stats) {
+                        setStats(data.stats)
+                    }
+                    if (data.history) {
+                        setHistory(data.history)
+                    }
                 } catch (err) {
                     console.error("Gagal memuat data keuangan:", err)
                 }
             })
         }
-        
         loadData()
     }, [user]) 
 
     if (!user) return null
 
     return (
-        <DashboardLayout title="Rekapitulasi Keuangan">
+        <DashboardLayout title="Dashboard Keuangan">
             
             {/* 1. SECTION CARDS */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
                 
-                {/* Card Pemasukan */}
+                {/* Income Card - PAKAI totalIncome */}
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex flex-col justify-between h-32 relative overflow-hidden group">
                     <div className="absolute top-0 right-0 p-4 opacity-10 text-green-600 group-hover:scale-110 transition-transform">
                         <TrendingUp size={80} />
                     </div>
                     <div>
-                        <p className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Total Pemasukan</p>
+                        <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Pemasukan (Bulan Ini)</p>
                         <h3 className="text-2xl font-black text-gray-800 mt-1">{formatRupiah(stats.totalIncome)}</h3>
                     </div>
                     <div className="flex items-center text-xs font-bold text-green-600 bg-green-50 w-fit px-2 py-1 rounded">
-                        <ArrowUpRight size={14} className="mr-1"/> Sumber: Pembayaran Murid
+                        <ArrowUpRight size={14} className="mr-1"/> Sumber: Pembayaran SPP
                     </div>
                 </div>
 
-                {/* Card Pengeluaran */}
+                {/* Expense Card - PAKAI totalExpense */}
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex flex-col justify-between h-32 relative overflow-hidden group">
                     <div className="absolute top-0 right-0 p-4 opacity-10 text-red-600 group-hover:scale-110 transition-transform">
                         <TrendingDown size={80} />
                     </div>
                     <div>
-                        <p className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Total Pengeluaran</p>
+                        <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Pengeluaran (Bulan Ini)</p>
                         <h3 className="text-2xl font-black text-gray-800 mt-1">{formatRupiah(stats.totalExpense)}</h3>
                     </div>
                     <div className="flex items-center text-xs font-bold text-red-600 bg-red-50 w-fit px-2 py-1 rounded">
@@ -91,31 +112,42 @@ export default function KeuanganPage() {
                     </div>
                 </div>
 
-                {/* Card Saldo Bersih */}
-                <div className={`p-6 rounded-xl shadow-sm border flex flex-col justify-between h-32 relative overflow-hidden text-white
-                    ${stats.netBalance >= 0 ? 'bg-[#0077AF] border-blue-600' : 'bg-orange-500 border-orange-600'}
-                `}>
-                    <div className="absolute top-0 right-0 p-4 opacity-20 text-white">
+                {/* Unpaid Invoices Card */}
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-orange-200 flex flex-col justify-between h-32 relative overflow-hidden group bg-gradient-to-br from-white to-orange-50">
+                    <div className="absolute top-0 right-0 p-4 opacity-20 text-orange-500">
+                        <AlertCircle size={80} />
+                    </div>
+                    <div>
+                        <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Tagihan Belum Lunas</p>
+                        <h3 className="text-2xl font-black text-orange-600 mt-1">{stats.unpaid_invoices} Siswa</h3>
+                    </div>
+                    <button onClick={() => router.push('/pembayaran')} className="text-xs font-bold text-orange-700 hover:underline text-left z-10 relative">
+                        Lihat & Tagih &rarr;
+                    </button>
+                </div>
+
+                {/* Unpaid Salaries Card */}
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-blue-200 flex flex-col justify-between h-32 relative overflow-hidden group bg-gradient-to-br from-white to-blue-50">
+                    <div className="absolute top-0 right-0 p-4 opacity-20 text-blue-500">
                         <Wallet size={80} />
                     </div>
                     <div>
-                        <p className="text-sm font-semibold opacity-90 uppercase tracking-wider">Saldo Bersih</p>
-                        <h3 className="text-3xl font-black mt-1">{formatRupiah(stats.netBalance)}</h3>
+                        <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Gaji Belum Dibayar</p>
+                        <h3 className="text-2xl font-black text-blue-600 mt-1">{stats.unpaid_salaries} Mentor</h3>
                     </div>
-                    <div className="text-xs font-medium opacity-80">
-                        {stats.netBalance >= 0 ? 'Kondisi Keuangan Sehat' : 'Pengeluaran melebihi Pemasukan'}
-                    </div>
+                    <button onClick={() => router.push('/gaji-mentor')} className="text-xs font-bold text-blue-700 hover:underline text-left z-10 relative">
+                        Proses Gaji &rarr;
+                    </button>
                 </div>
             </div>
 
-            {/* 2. SECTION TABLE RIWAYAT */}
+            {/* 2. HISTORY TABLE */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200">
                 <div className="p-6 border-b border-gray-100 flex justify-between items-center">
                     <div>
-                        <h2 className="text-lg font-bold text-gray-800">Riwayat Transaksi Gabungan</h2>
-                        <p className="text-sm text-gray-500">Rekap otomatis dari Pembayaran Murid, Operasional, dan Gaji.</p>
+                        <h2 className="text-lg font-bold text-gray-800">Riwayat Transaksi Terakhir</h2>
+                        <p className="text-sm text-gray-500">Gabungan dari semua jenis transaksi.</p>
                     </div>
-                    {/* Placeholder Filter Button */}
                     <button className="flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-[#0077AF] border px-3 py-2 rounded-lg hover:bg-gray-50 transition">
                         <Filter size={16} /> Filter
                     </button>
@@ -136,12 +168,12 @@ export default function KeuanganPage() {
                             {history.length === 0 ? (
                                 <tr>
                                     <td colSpan={5} className="p-8 text-center text-gray-400">
-                                        Belum ada transaksi tercatat.
+                                        Data transaksi belum tersedia.
                                     </td>
                                 </tr>
                             ) : (
                                 history.map((item, idx) => (
-                                    <tr key={`${item.type}-${item.id}-${idx}`} className="hover:bg-gray-50 transition-colors">
+                                    <tr key={idx} className="hover:bg-gray-50 transition-colors">
                                         <td className="px-6 py-4 text-gray-600 text-sm whitespace-nowrap">
                                             {new Date(item.date).toLocaleDateString('id-ID', {
                                                 day: 'numeric', month: 'long', year: 'numeric'
@@ -152,7 +184,7 @@ export default function KeuanganPage() {
                                         </td>
                                         <td className="px-6 py-4">
                                             <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs font-semibold border">
-                                                {item.category}
+                                                {item.category || 'Umum'}
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 text-center">

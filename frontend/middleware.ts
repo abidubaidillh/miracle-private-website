@@ -6,15 +6,13 @@ export function middleware(req: NextRequest) {
   const pathname = req.nextUrl.pathname
 
   // 1. Dapatkan Cookie Auth
-  const authCookie = req.cookies.get('auth')?.value
+  const authCookie = req.cookies.get('auth')?.value || req.cookies.get('token')?.value
 
-  // 2. Tentukan apakah ini halaman publik
-  // 🚨 PENTING: '/register' DIHAPUS dari sini agar tidak bisa diakses publik
+  // 2. Tentukan halaman publik
   const isPublicPage = pathname === '/login'
 
   // --- LOGIKA REDIRECT ---
 
-  // BLOKIR AKSES KE /register SECARA EKSPLISIT
   if (pathname === '/register') {
     url.pathname = '/login'
     return NextResponse.redirect(url)
@@ -24,8 +22,8 @@ export function middleware(req: NextRequest) {
   if (pathname === '/') {
     if (authCookie) {
       try {
-        const auth = JSON.parse(decodeURIComponent(authCookie))
-        const role = (auth?.user?.role || '').toUpperCase()
+        const auth = safeParseAuth(authCookie)
+        const role = (auth?.user?.role || auth?.role || '').toUpperCase()
         url.pathname = getRoleDefaultPath(role)
         return NextResponse.redirect(url)
       } catch (e) {
@@ -40,19 +38,17 @@ export function middleware(req: NextRequest) {
     }
   }
 
-  // KASUS B: User SUDAH Login, tapi mencoba buka halaman Login
+  // KASUS B: User SUDAH Login -> Buka Login
   if (authCookie && isPublicPage) {
     try {
-      const auth = JSON.parse(decodeURIComponent(authCookie))
-      const role = (auth?.user?.role || '').toUpperCase()
+      const auth = safeParseAuth(authCookie)
+      const role = (auth?.user?.role || auth?.role || '').toUpperCase()
       url.pathname = getRoleDefaultPath(role)
       return NextResponse.redirect(url)
-    } catch (e) {
-      // Ignore error
-    }
+    } catch (e) { }
   }
 
-  // KASUS C: User BELUM Login, tapi mencoba buka halaman yang dilindungi
+  // KASUS C: User BELUM Login -> Buka Halaman Protected
   if (!authCookie && !isPublicPage) {
     url.pathname = '/login'
     return NextResponse.redirect(url)
@@ -61,42 +57,54 @@ export function middleware(req: NextRequest) {
   // KASUS D: Validasi Hak Akses Role (RBAC)
   if (authCookie && !isPublicPage) {
     try {
-      const auth = JSON.parse(decodeURIComponent(authCookie))
-      const role = (auth?.user?.role || '').toUpperCase()
+      const auth = safeParseAuth(authCookie)
+      const role = (auth?.user?.role || auth?.role || 'GUEST').toUpperCase()
 
-      // --- ATURAN HAK AKSES SESUAI REQUIREMENT ---
+      // --- ATURAN HAK AKSES ---
 
-      // 1. Keuangan & Gaji (Owner & Bendahara only)
-      if (
-        pathname.startsWith('/keuangan') || 
-        pathname.startsWith('/gaji-mentor') || 
-        pathname.startsWith('/biaya-operasional') ||
-        pathname.startsWith('/pembayaran')
-      ) {
-        if (role === 'MENTOR') {
-          return NextResponse.redirect(new URL('/jadwal', req.url))
+      // 1. AKSES BENDAHARA (FOKUS KEUANGAN)
+      if (role === 'BENDAHARA') {
+        // DILARANG: Fitur Operasional & Sistem
+        if (
+            pathname.startsWith('/jadwal') || 
+            pathname.startsWith('/kelola-user') ||
+            pathname.startsWith('/mentor/edit') // Tidak boleh edit mentor
+        ) {
+             return NextResponse.redirect(new URL('/keuangan', req.url))
         }
       }
 
-      // 2. Jadwal (Owner, Admin, Mentor) - Bendahara dilarang
-      if (pathname.startsWith('/jadwal')) {
-        if (role === 'BENDAHARA') {
-          return NextResponse.redirect(new URL('/keuangan', req.url))
-        }
-      }
-
-      // 3. Paket Kelas & Murid (Owner, Admin, Bendahara) - Mentor dilarang
-      if (pathname.startsWith('/paket-kelas') || pathname.startsWith('/murid')) {
-        if (role === 'MENTOR') {
-          return NextResponse.redirect(new URL('/jadwal', req.url))
-        }
-      }
-      
-      // 4. Kelola User (Hanya Owner & Admin)
-      if (pathname.startsWith('/kelola-user')) {
-         if (role !== 'OWNER' && role !== 'ADMIN') {
+      // 2. AKSES ADMIN (FOKUS OPERASIONAL)
+      if (role === 'ADMIN') {
+        // DILARANG: Fitur Keuangan Sensitif & Gaji
+        // Admin boleh akses /pembayaran (untuk input tagihan murid), tapi tidak boleh lihat Gaji Mentor
+        if (
+            pathname.startsWith('/keuangan') || 
+            pathname.startsWith('/gaji-mentor') || 
+            pathname.startsWith('/biaya-operasional')
+        ) {
              return NextResponse.redirect(new URL('/dashboard', req.url))
-         }
+        }
+      }
+
+      // 3. AKSES MENTOR (SELF SERVICE)
+      if (role === 'MENTOR') {
+        // DILARANG: Hampir semua kecuali Profil, Jadwal Saya, Gaji Saya
+        if (
+            pathname.startsWith('/keuangan') || 
+            pathname.startsWith('/biaya-operasional') ||
+            pathname.startsWith('/pembayaran') ||
+            pathname.startsWith('/murid') ||
+            pathname.startsWith('/paket-kelas') ||
+            pathname.startsWith('/kelola-user')
+        ) {
+            return NextResponse.redirect(new URL('/mentor/me', req.url))
+        }
+      }
+
+      // 4. AKSES GUEST/UNKNOWN
+      if (role === 'GUEST') {
+         return NextResponse.redirect(new URL('/login', req.url))
       }
 
     } catch (e) {
@@ -110,16 +118,26 @@ export function middleware(req: NextRequest) {
   return NextResponse.next()
 }
 
-// Helper: Menentukan halaman utama berdasarkan Role
+// Helper: Parse Cookie
+function safeParseAuth(cookieVal: string) {
+    try {
+        const decoded = decodeURIComponent(cookieVal)
+        return JSON.parse(decoded)
+    } catch {
+        return { user: { role: 'GUEST' } }
+    }
+}
+
+// Helper: Default Path per Role
 function getRoleDefaultPath(role: string): string {
   switch (role) {
     case 'OWNER':
     case 'ADMIN':
       return '/dashboard'
     case 'BENDAHARA':
-      return '/keuangan'
+      return '/keuangan' // ✅ Bendahara default ke Dashboard Keuangan
     case 'MENTOR':
-      return '/jadwal'
+      return '/mentor/me'
     default:
       return '/login'
   }

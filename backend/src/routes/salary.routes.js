@@ -6,13 +6,32 @@ const allowedRoles = require('../middlewares/role.middleware')
 
 router.use(authMiddleware)
 
-// 1. Lihat Daftar Gaji (Owner, Bendahara, Admin)
-router.get('/', allowedRoles(['OWNER', 'BENDAHARA', 'ADMIN']), controller.getSalaries)
+// 1. Lihat Gaji PRIBADI (Khusus Mentor) - 🔥 WAJIB ADA SEBELUM ROUTE '/'
+router.get(
+    '/my-salary', 
+    allowedRoles(['MENTOR', 'OWNER', 'ADMIN']), 
+    controller.getMySalaries
+)
 
-// 2. Simpan Draft (Owner, Bendahara) - Admin tidak boleh edit
-router.post('/save', allowedRoles(['OWNER', 'BENDAHARA']), controller.saveSalaryDraft)
+// 2. Lihat Daftar Gaji SEMUA (Owner, Bendahara, Admin)
+router.get(
+    '/', 
+    allowedRoles(['OWNER', 'BENDAHARA', 'ADMIN']), 
+    controller.getSalaries
+)
 
-// 3. Bayar Gaji (Owner, Bendahara)
-router.post('/:id/pay', allowedRoles(['OWNER', 'BENDAHARA']), controller.paySalary)
+// 3. Simpan Draft (Owner, Bendahara) - Admin tidak boleh edit
+router.post(
+    '/save', 
+    allowedRoles(['OWNER', 'BENDAHARA']), 
+    controller.saveSalaryDraft
+)
+
+// 4. Bayar Gaji (Owner, Bendahara)
+router.post(
+    '/:id/pay', 
+    allowedRoles(['OWNER', 'BENDAHARA']), 
+    controller.paySalary
+)
 
 module.exports = router

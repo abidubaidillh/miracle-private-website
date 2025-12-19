@@ -8,8 +8,20 @@ const app = express()
 const cookieParser = require('cookie-parser')
 
 // ==========================================================
+// 0. Debug Environment (Cek Koneksi Supabase)
+// ==========================================================
+console.log('--- SUPABASE BACKEND CONFIG DEBUG ---')
+console.log('1. URL Loaded:', !!process.env.SUPABASE_URL)
+console.log('2. KEY Loaded:', !!process.env.SUPABASE_KEY)
+if (process.env.SUPABASE_KEY) {
+    console.log('3. KEY Prefix:', process.env.SUPABASE_KEY.substring(0, 10))
+}
+console.log('-----------------------------------')
+
+// ==========================================================
 // 1. Import Routes
 // ==========================================================
+// Pastikan semua file ini ada di folder src/routes/
 const authRoutes = require('./routes/auth.routes')
 const muridRoutes = require('./routes/murid.routes')
 const mentorRoutes = require('./routes/mentor.routes') 
@@ -18,18 +30,20 @@ const jadwalRoutes = require('./routes/jadwal.routes')
 const paymentRoutes = require('./routes/payment.routes')
 const absensiRoutes = require('./routes/absensi.routes')
 const transactionRoutes = require('./routes/transaction.routes') 
-const financeRoutes = require('./routes/finance.routes')
-const salaryRoutes = require('./routes/salary.routes') // ✅ [BARU] Import Route Gaji
+const financeRoutes = require('./routes/finance.routes') // ✅ Penting untuk Dashboard Keuangan
+const salaryRoutes = require('./routes/salary.routes')   // ✅ Penting untuk Gaji Mentor
 
 // ==========================================================
 // 2. Middleware Utama
 // ==========================================================
 app.use(cors({ 
     origin: process.env.CLIENT_URL || 'http://localhost:3000',
-    credentials: true 
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
 }))
 
-// 🚨 WAJIB agar req.body tidak undefined
+// WAJIB agar req.body terbaca sebagai JSON
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
 
@@ -42,7 +56,8 @@ app.get('/api/health', (req, res) => {
     res.json({ 
         status: 'ok', 
         serverTime: new Date().toISOString(),
-        version: '1.0.0'
+        version: '1.0.0',
+        message: 'Miracle Private Backend is Healthy 🚀'
     })
 })
 
@@ -56,85 +71,27 @@ app.get('/', (req, res) => {
 
 console.log('--- MOUNTING ROUTES ---')
 
-// 4.1 Auth
-try {
-    app.use('/api/auth', authRoutes)
-    console.log('✅ Auth Routes mounted at /api/auth')
-} catch (e) {
-    console.warn('⚠️ auth.routes gagal dimuat:', e.message)
+// Helper function untuk mount route dengan aman
+const mount = (path, route, name) => {
+    try {
+        if (!route) throw new Error(`Route module is undefined. Check your require('./routes/...') path.`)
+        app.use(path, route)
+        console.log(`✅ ${name} mounted at ${path}`)
+    } catch (e) {
+        console.error(`❌ Failed to mount ${name}:`, e.message)
+    }
 }
 
-// 4.2 Murid / Students
-try {
-    app.use('/api/students', muridRoutes)
-    console.log('✅ Murid Routes mounted at /api/students')
-} catch (e) {
-    console.error('❌ Failed to mount muridRoutes:', e.message)
-}
-
-// 4.3 Mentor
-try {
-    app.use('/api/mentors', mentorRoutes)
-    console.log('✅ Mentor Routes mounted at /api/mentors')
-} catch (e) {
-    console.error('❌ Failed to mount mentorRoutes:', e.message)
-}
-
-// 4.4 Paket Kelas
-try {
-    app.use('/api/packages', paketRoutes)
-    console.log('✅ Paket Routes mounted at /api/packages')
-} catch (e) {
-    console.error('❌ Failed to mount paketRoutes:', e.message)
-}
-
-// 4.5 Jadwal / Schedules
-try {
-    app.use('/api/schedules', jadwalRoutes)
-    console.log('✅ Jadwal Routes mounted at /api/schedules')
-} catch (e) {
-    console.error('❌ Failed to mount jadwalRoutes:', e.message)
-}
-
-// 4.6 Pembayaran / Payments
-try {
-    app.use('/api/payments', paymentRoutes)
-    console.log('✅ Payment Routes mounted at /api/payments')
-} catch (e) {
-    console.error('❌ Failed to mount paymentRoutes:', e.message)
-}
-
-// 4.7 Absensi / Attendance
-try {
-    app.use('/api/attendance', absensiRoutes)
-    console.log('✅ Absensi Routes mounted at /api/attendance')
-} catch (e) {
-    console.error('❌ Failed to mount absensiRoutes:', e.message)
-}
-
-// 4.8 Transaksi / Operasional
-try {
-    app.use('/api/transactions', transactionRoutes)
-    console.log('✅ Transaction Routes mounted at /api/transactions')
-} catch (e) {
-    console.error('❌ Failed to mount transactionRoutes:', e.message)
-}
-
-// 4.9 Finance / Keuangan (Dashboard Rekap)
-try {
-    app.use('/api/finance', financeRoutes)
-    console.log('✅ Finance Routes mounted at /api/finance')
-} catch (e) {
-    console.error('❌ Failed to mount financeRoutes:', e.message)
-}
-
-// 4.10 Salary / Gaji Mentor (✅ INI YANG DITAMBAHKAN)
-try {
-    app.use('/api/salaries', salaryRoutes)
-    console.log('✅ Salary Routes mounted at /api/salaries')
-} catch (e) {
-    console.error('❌ Failed to mount salaryRoutes:', e.message)
-}
+mount('/api/auth', authRoutes, 'Auth Routes')
+mount('/api/students', muridRoutes, 'Murid Routes')
+mount('/api/mentors', mentorRoutes, 'Mentor Routes')
+mount('/api/packages', paketRoutes, 'Paket Routes')
+mount('/api/schedules', jadwalRoutes, 'Jadwal Routes')
+mount('/api/payments', paymentRoutes, 'Payment Routes')
+mount('/api/attendance', absensiRoutes, 'Absensi Routes')
+mount('/api/transactions', transactionRoutes, 'Transaction Routes')
+mount('/api/finance', financeRoutes, 'Finance Routes') // Endpoint: /api/finance/summary
+mount('/api/salaries', salaryRoutes, 'Salary Routes')
 
 console.log('-----------------------')
 
@@ -142,7 +99,7 @@ console.log('-----------------------')
 // 5. Error Handling Middleware (JANGAN DIPINDAH)
 // ==========================================================
 
-// 404 Handler
+// 404 Handler (Endpoint tidak ditemukan)
 app.use((req, res, next) => {
     const error = new Error(`Not Found - ${req.originalUrl}`)
     res.status(404)
@@ -152,9 +109,11 @@ app.use((req, res, next) => {
 // Global Error Handler
 app.use((error, req, res, next) => {
     const statusCode = res.statusCode === 200 ? 500 : res.statusCode
-    res.status(statusCode)
-    res.json({
-        message: error.message,
+    console.error(`🔥 ERROR: ${error.message}`)
+    
+    // Jangan tampilkan stack trace di production untuk keamanan
+    res.status(statusCode).json({
+        error: error.message, 
         stack: process.env.NODE_ENV === 'production' ? '🥞' : error.stack,
     })
 })

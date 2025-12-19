@@ -1,124 +1,111 @@
-// frontend/lib/mentorActions.ts
+import { getAuthToken } from "./auth"
 
-const API_BASE_URL = "http://localhost:4000/api/mentors"
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api"
 
-// ===============================
-// TYPE
-// ===============================
+// ==========================================
+// TYPE DEFINITIONS
+// ==========================================
+
 export interface Mentor {
   id: string
   name: string
+  email?: string
   phone_number: string
   address?: string | null
+  subject?: string | null
+  subjects?: string | null
   expertise?: string | null
   salary_per_session: number
   status: "AKTIF" | "NON-AKTIF"
-  created_at?: string
-  updated_at?: string
 }
 
-interface MentorResponse {
-  mentors: Mentor[]
+// Definisi tipe data Jadwal Ringkas (dari join backend)
+export interface ScheduleSummary {
+  id: string
+  date: string
+  time: string
+  subject: string
+  students?: {
+    name: string
+  }
+}
+
+// Interface khusus untuk Profile Page Response
+export interface MentorProfile {
+  mentor: Mentor
+  upcoming_schedules: ScheduleSummary[] // ✅ WAJIB ADA: Agar list jadwal muncul
   stats: {
-    active: number
-    inactive: number
+    sessions_this_month: number
+    estimated_income: number
   }
 }
 
-// ===============================
-// AUTH FETCH (WAJIB)
-// ===============================
-async function authFetch(
-  url: string,
-  options: RequestInit = {}
-) {
-  return fetch(url, {
+// ==========================================
+// HELPER FETCH
+// ==========================================
+async function authFetch(endpoint: string, options: RequestInit = {}) {
+  const token = getAuthToken()
+  
+  const headers = {
+    "Content-Type": "application/json",
+    ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+    ...options.headers,
+  }
+
+  const res = await fetch(`${API_BASE_URL}${endpoint}`, {
     ...options,
-    credentials: "include", // 🔐 WAJIB
-    headers: {
-      "Content-Type": "application/json",
-      ...(options.headers || {}),
-    },
+    headers,
   })
-}
 
-// ===============================
-// GET (READ ALL / SELF)
-// ===============================
-export async function getMentors(): Promise<{
-  mentors: Mentor[]
-  activeCount: number
-  inactiveCount: number
-}> {
-  const response = await authFetch(API_BASE_URL)
-
-  const result = await response.json()
-
-  if (!response.ok) {
-    throw new Error(result.message || "Gagal mengambil data mentor")
+  // Handle Unauthorized (Token Expired)
+  if (res.status === 401) {
+    if (typeof window !== 'undefined') window.location.href = '/login'
+    throw new Error("Sesi habis. Silakan login kembali.")
   }
 
-  return {
-    mentors: result.mentors || [],
-    activeCount: result.stats?.active || 0,
-    inactiveCount: result.stats?.inactive || 0,
+  const result = await res.json()
+
+  if (!res.ok) {
+    throw new Error(result.message || result.error || "Terjadi kesalahan pada server")
   }
+
+  return result
 }
 
-// ===============================
-// POST (CREATE)
-// ===============================
-export async function createMentor(
-  payload: Omit<Mentor, "id">
-): Promise<Mentor> {
-  const response = await authFetch(API_BASE_URL, {
+// ==========================================
+// ACTIONS
+// ==========================================
+
+// 1. Get All Mentors (Untuk Admin - List View)
+export async function getMentors() {
+  return await authFetch("/mentors")
+}
+
+// 2. Get My Profile (Untuk Mentor Login - Dashboard) 
+// Return type disesuaikan dengan interface MentorProfile
+export async function getMentorProfile(): Promise<MentorProfile> {
+  return await authFetch("/mentors/me")
+}
+
+// 3. Create Mentor
+export async function createMentor(data: any) {
+  return await authFetch("/mentors", {
     method: "POST",
-    body: JSON.stringify(payload),
+    body: JSON.stringify(data),
   })
-
-  const result = await response.json()
-
-  if (!response.ok) {
-    throw new Error(result.message || "Gagal menambahkan mentor")
-  }
-
-  return result.mentor as Mentor
 }
 
-// ===============================
-// PUT (UPDATE)
-// ===============================
-export async function updateMentor(
-  mentorId: string,
-  payload: Partial<Omit<Mentor, "id">>
-): Promise<Mentor> {
-  const response = await authFetch(`${API_BASE_URL}/${mentorId}`, {
+// 4. Update Mentor
+export async function updateMentor(id: string, data: any) {
+  return await authFetch(`/mentors/${id}`, {
     method: "PUT",
-    body: JSON.stringify(payload),
+    body: JSON.stringify(data),
   })
-
-  const result = await response.json()
-
-  if (!response.ok) {
-    throw new Error(result.message || "Gagal memperbarui mentor")
-  }
-
-  return result.mentor as Mentor
 }
 
-// ===============================
-// DELETE
-// ===============================
-export async function deleteMentor(
-  mentorId: string
-): Promise<void> {
-  const response = await authFetch(`${API_BASE_URL}/${mentorId}`, {
+// 5. Delete Mentor
+export async function deleteMentor(id: string) {
+  return await authFetch(`/mentors/${id}`, {
     method: "DELETE",
   })
-
-  const result = await response.json()
-
-  if (!response.ok) {
-    throw new Error(result.message || "Gagal menghapus mentor")
-  }
 }

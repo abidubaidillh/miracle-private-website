@@ -3,64 +3,121 @@ const supabase = require('../config/supabase')
 
 async function getFinanceSummary(req, res) {
     try {
-        // 1. Ambil Pemasukan dari Pembayaran Murid (Payments) yang LUNAS
-        const { data: payments, error: errPay } = await supabase
+        const now = new Date()
+        const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+
+        // 1. QUERY PEMASUKAN
+        const { data: incomeData, error: errInc } = await supabase
             .from('payments')
-            .select('id, amount, payment_date, method, students(name)')
+            .select('amount')
             .eq('status', 'LUNAS')
-            .order('payment_date', { ascending: false })
+            .gte('payment_date', firstDayOfMonth)
 
-        if (errPay) throw errPay
+        if (errInc) throw errInc
+        const totalIncome = incomeData.reduce((sum, item) => sum + (item.amount || 0), 0)
 
-        // 2. Ambil Pengeluaran (Jika Anda tidak pakai operasional, ini akan kosong, tidak error)
-        // Kita tetap pasang agar sistem tidak crash jika nanti Anda berubah pikiran
-        const { data: expenses, error: errExp } = await supabase
+        // 2. QUERY PENGELUARAN
+        // A. Operasional
+        const { data: operationalData } = await supabase
             .from('transactions')
-            .select('id, amount, date, description, categories(name)')
+            .select('amount')
             .eq('type', 'EXPENSE')
-            .order('date', { ascending: false })
-            
-        // Jika tabel transactions belum ada, anggap array kosong agar tidak error
-        const safeExpenses = errExp ? [] : expenses;
-
-        // --- MENGHITUNG TOTAL ---
-        const totalIncome = payments.reduce((sum, p) => sum + (p.amount || 0), 0)
-        const totalOperational = safeExpenses.reduce((sum, e) => sum + (e.amount || 0), 0)
+            .gte('date', firstDayOfMonth)
         
-        // Nanti ditambah Gaji Mentor di sini
-        const totalSalary = 0 
+        const operationalExpense = operationalData ? operationalData.reduce((sum, item) => sum + (item.amount || 0), 0) : 0
+
+        // B. Gaji Mentor (Sudah Lunas Bulan Ini)
+        const { data: salaryData } = await supabase
+            .from('salaries')
+            .select('total_amount')
+            .eq('status', 'PAID')
+            .gte('payment_date', firstDayOfMonth)
+
+        const salaryExpense = salaryData ? salaryData.reduce((sum, item) => sum + (item.total_amount || 0), 0) : 0
+        const totalExpense = operationalExpense + salaryExpense
+
+        // 3. ACTIONABLE ITEMS (PENDING)
+        // A. Tagihan Murid Belum Lunas
+        const { count: unpaidInvoices } = await supabase
+            .from('payments')
+            .select('*', { count: 'exact', head: true })
+            .neq('status', 'LUNAS')
+
+        // B. ✅ FIXED: Gaji Mentor Belum Dibayar
+        // Kita harus menghitung jumlah Mentor Aktif yang status gajinya di tabel 'salaries' belum 'PAID'
+        // untuk bulan dan tahun berjalan.
+        const currentMonth = now.getMonth() + 1;
+        const currentYear = now.getFullYear();
+
+        // Ambil semua mentor aktif
+        const { data: activeMentors } = await supabase
+            .from('mentors')
+            .select('id')
+            .eq('status', 'AKTIF');
+
+        // Ambil data gaji yang sudah lunas untuk bulan ini
+        const { data: paidSalaries } = await supabase
+            .from('salaries')
+            .select('mentor_id')
+            .eq('month', currentMonth)
+            .eq('year', currentYear)
+            .eq('status', 'PAID');
+
+        const paidMentorIds = (paidSalaries || []).map(s => s.mentor_id);
         
-        const totalExpense = totalOperational + totalSalary
-        const netBalance = totalIncome - totalExpense
+        // Unpaid = Semua mentor aktif MINUS mentor yang sudah dibayar
+        const unpaidSalariesCount = (activeMentors || []).filter(m => !paidMentorIds.includes(m.id)).length;
 
-        // --- GABUNG DATA UNTUK RIWAYAT ---
-        const historyPayments = payments.map(p => ({
-            id: p.id,
-            date: p.payment_date,
-            description: `Pembayaran SPP - ${p.students?.name || 'Murid'}`,
-            category: 'Pemasukan Les',
-            type: 'INCOME',
-            amount: p.amount
-        }))
+        // 4. HISTORY (Sama seperti sebelumnya)
+        const { data: recentPayments } = await supabase
+            .from('payments')
+            .select('id, payment_date, amount, title, students(name)')
+            .eq('status', 'LUNAS')
+            .order('payment_date', { ascending: false }).limit(10)
 
-        const historyExpenses = safeExpenses.map(e => ({
-            id: e.id,
-            date: e.date,
-            description: e.description || '-',
-            category: e.categories?.name || 'Operasional',
-            type: 'EXPENSE',
-            amount: e.amount
-        }))
+        const { data: recentOps } = await supabase
+            .from('transactions')
+            .select('id, date, amount, description, categories(name)')
+            .eq('type', 'EXPENSE')
+            .order('date', { ascending: false }).limit(10)
 
-        // Gabung & Sortir (Terbaru diatas)
-        const combinedHistory = [...historyPayments, ...historyExpenses]
-            .sort((a, b) => new Date(b.date) - new Date(a.date))
+        const { data: recentSalaries } = await supabase
+            .from('salaries')
+            .select('id, payment_date, total_amount, mentors(name)')
+            .eq('status', 'PAID')
+            .order('payment_date', { ascending: false }).limit(10)
+
+        const combinedHistory = [
+            ...(recentPayments || []).map(p => ({
+                date: p.payment_date,
+                description: `Pembayaran: ${p.students?.name || 'Siswa'}`,
+                category: 'Pemasukan Les',
+                type: 'INCOME',
+                amount: p.amount
+            })),
+            ...(recentOps || []).map(o => ({
+                date: o.date,
+                description: o.description,
+                category: o.categories?.name || 'Operasional',
+                type: 'EXPENSE',
+                amount: o.amount
+            })),
+            ...(recentSalaries || []).map(s => ({
+                date: s.payment_date,
+                description: `Gaji: ${s.mentors?.name}`,
+                category: 'Gaji Mentor',
+                type: 'EXPENSE',
+                amount: s.total_amount
+            }))
+        ].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 20)
 
         return res.json({
             stats: {
                 totalIncome,
                 totalExpense,
-                netBalance
+                netBalance: totalIncome - totalExpense,
+                unpaid_invoices: unpaidInvoices || 0,
+                unpaid_salaries: unpaidSalariesCount // ✅ Sekarang menampilkan angka yang benar
             },
             history: combinedHistory
         })

@@ -2,27 +2,37 @@
 
 import React, { useEffect, useState } from "react"
 import DashboardLayout from "@/components/DashboardLayout"
-import { Search, Pencil, Trash2, Briefcase, User } from "lucide-react"
+import { Search, Pencil, Trash2, Briefcase, User, CheckCircle, XCircle, Phone, MapPin, DollarSign } from "lucide-react"
 import MentorFormModal from "@/components/MentorFormModal"
 import { getMentors, deleteMentor, Mentor } from "@/lib/mentorActions"
 import { useUser } from "@/context/UserContext"
 import { useLoading } from "@/context/LoadingContext"
 
-// Komponen Pill Statistik Kecil
-const StatPill = ({ icon: Icon, count, label, colorClass }: any) => (
-  <div className={`flex items-center px-4 py-2 rounded-lg text-white text-xs font-bold shadow-sm transition-transform hover:scale-105 ${colorClass}`}>
-    <Icon size={16} className="mr-2" />
-    <span>{label}: {count}</span>
+// =============================================================================
+// KOMPONEN: STAT CARD
+// =============================================================================
+const StatCard = ({ icon: Icon, count, label, colorClass, iconColor }: any) => (
+  <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 flex items-center gap-4 transition-transform hover:scale-[1.02]">
+      <div className={`p-3 rounded-full ${colorClass} ${iconColor}`}>
+          <Icon size={24} />
+      </div>
+      <div>
+          <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">{label}</p>
+          <h3 className="text-xl font-black text-gray-800">{count}</h3>
+      </div>
   </div>
 )
 
+// =============================================================================
+// HALAMAN UTAMA
+// =============================================================================
 export default function MentorPage() {
   const { user } = useUser()
   const { withLoading } = useLoading()
 
   // State
   const [searchQuery, setSearchQuery] = useState("")
-  const [mentorData, setMentorData] = useState<any[]>([]) // Pakai any agar fleksibel membaca subject/expertise
+  const [mentorData, setMentorData] = useState<any[]>([]) 
   const [activeCount, setActiveCount] = useState(0)
   const [inactiveCount, setInactiveCount] = useState(0)
   
@@ -35,7 +45,7 @@ export default function MentorPage() {
   const isOwner = role === "OWNER"
   const isAdmin = role === "ADMIN"
   
-  // Permission
+  // Permission (Owner & Admin bisa Edit & Hapus)
   const canViewSalary = isOwner || isAdmin 
   const canEditInfo = isOwner || isAdmin 
 
@@ -49,7 +59,6 @@ export default function MentorPage() {
         const query = searchQuery.toLowerCase()
         const filtered = searchQuery
           ? allMentors.filter((m: any) => {
-              // Cek variabel subject/expertise agar pencarian bidang juga jalan
               const subject = m.subject || m.subjects || m.expertise || ''
               return (
                 m.name.toLowerCase().includes(query) || 
@@ -62,7 +71,6 @@ export default function MentorPage() {
         setMentorData(filtered)
         
         // Update Stats
-        // Hitung manual dari data jika backend tidak kirim stats
         const active = allMentors.filter((m: any) => m.status === 'AKTIF').length
         const inactive = allMentors.filter((m: any) => m.status !== 'AKTIF').length
         
@@ -75,7 +83,7 @@ export default function MentorPage() {
     })
   }
 
-  // Effect untuk inisialisasi dan debounce search
+  // Effect Search
   useEffect(() => {
     const timer = setTimeout(() => {
       fetchMentors()
@@ -89,10 +97,9 @@ export default function MentorPage() {
     await withLoading(async () => {
       try {
         await deleteMentor(id)
-        fetchMentors() // Refresh data
+        fetchMentors() 
       } catch (err) {
         alert("Gagal menghapus mentor")
-        console.error(err)
       }
     })
   }
@@ -106,26 +113,40 @@ export default function MentorPage() {
 
   return (
     <DashboardLayout title="Data Mentor">
-      <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
-        {/* Stats Pills */}
-        <div className="flex gap-3 overflow-x-auto pb-2 md:pb-0 w-full md:w-auto">
-          <StatPill icon={Briefcase} label="Total" count={activeCount + inactiveCount} colorClass="bg-gray-600" />
-          <StatPill icon={User} label="Aktif" count={activeCount} colorClass="bg-[#5AB267]" />
-          <StatPill icon={User} label="Non-Aktif" count={inactiveCount} colorClass="bg-[#FF0000]" />
-        </div>
+      
+      {/* Bagian Statistik */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+          <StatCard 
+              icon={Briefcase} 
+              label="Total Mentor" 
+              count={activeCount + inactiveCount} 
+              colorClass="bg-blue-100" iconColor="text-[#0077AF]" 
+          />
+          <StatCard 
+              icon={CheckCircle} 
+              label="Mentor Aktif" 
+              count={activeCount} 
+              colorClass="bg-green-100" iconColor="text-green-600" 
+          />
+          <StatCard 
+              icon={XCircle} 
+              label="Tidak Aktif" 
+              count={inactiveCount} 
+              colorClass="bg-red-100" iconColor="text-red-600" 
+          />
+      </div>
 
-        {/* Search Bar */}
-        <div className="w-full md:w-80">
-          <div className="relative group">
-            <input
-              type="text"
-              placeholder="Cari Nama, HP, atau Bidang..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 bg-white text-gray-700 text-sm font-medium rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#0077AF] focus:border-transparent transition-all shadow-sm group-hover:border-gray-400"
-            />
-            <Search className="absolute left-3 top-2.5 text-gray-400 group-hover:text-[#0077AF] transition-colors" size={18} />
-          </div>
+      {/* Action Bar (Search) */}
+      <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+        <div className="relative w-full md:w-96 group">
+          <input
+            type="text"
+            placeholder="Cari Nama, HP, atau Bidang..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0077AF] shadow-sm transition-all group-hover:border-gray-300"
+          />
+          <Search className="absolute left-3 top-2.5 text-gray-400 group-hover:text-[#0077AF] transition-colors" size={20} />
         </div>
       </div>
 
@@ -166,16 +187,19 @@ export default function MentorPage() {
 
                     {/* KONTAK */}
                     <td className="px-6 py-4">
-                        <div className="text-sm text-gray-600 font-mono bg-gray-100 px-2 py-1 rounded w-fit">
-                            {m.phone_number}
+                        <div className="flex items-center gap-2">
+                            <Phone size={14} className="text-gray-400"/>
+                            <span className="text-sm text-gray-600 font-mono">
+                                {m.phone_number || '-'}
+                            </span>
                         </div>
                     </td>
 
                     {/* BIDANG (FIXED) */}
                     <td className="px-6 py-4">
-                      <span className="bg-blue-100 text-[#0077AF] px-3 py-1 rounded-full text-xs font-bold border border-blue-200 shadow-sm">
-                        {/* 🔥 INI FIX UTAMANYA: Cek semua variasi nama kolom */}
-                        {m.subject || m.subjects || m.expertise || "-"}
+                      <span className="bg-blue-50 text-[#0077AF] px-3 py-1 rounded-full text-xs font-bold border border-blue-100 shadow-sm inline-flex items-center gap-1">
+                        <Briefcase size={10} />
+                        {m.subject || m.subjects || m.expertise || "Umum"}
                       </span>
                     </td>
 
@@ -193,33 +217,34 @@ export default function MentorPage() {
                     {/* GAJI */}
                     {canViewSalary && (
                       <td className="px-6 py-4 text-right">
-                        <span className="text-gray-700 font-mono font-bold text-sm">
-                            {formatRupiah(m.salary_per_session || 0)}
-                        </span>
+                        <div className="flex items-center justify-end gap-1 text-gray-700 font-mono font-bold text-sm">
+                            <span className="text-gray-400 text-xs font-normal">Rp</span>
+                            {new Intl.NumberFormat("id-ID").format(m.salary_per_session || 0)}
+                        </div>
                       </td>
                     )}
 
-                    {/* AKSI */}
+                    {/* AKSI (EDIT & DELETE) */}
                     {canEditInfo && (
                       <td className="px-6 py-4 text-center">
-                        <div className="flex justify-center gap-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                        <div className="flex justify-center gap-2">
+                          {/* TOMBOL EDIT (Untuk Status & Data) */}
                           <button
                             onClick={() => { setEditingMentor(m); setIsModalOpen(true) }}
-                            className="bg-yellow-100 text-yellow-600 p-2 rounded-lg hover:bg-yellow-200 transition shadow-sm"
-                            title="Edit Data"
+                            className="p-2 bg-yellow-50 text-yellow-600 hover:bg-yellow-100 rounded-lg transition-all border border-yellow-200 shadow-sm"
+                            title="Edit Data & Status"
                           >
                             <Pencil size={16} />
                           </button>
                           
-                          {isOwner && (
-                            <button
-                              onClick={() => handleDelete(m.id, m.name)}
-                              className="bg-red-100 text-red-600 p-2 rounded-lg hover:bg-red-200 transition shadow-sm"
-                              title="Hapus Mentor"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          )}
+                          {/* TOMBOL DELETE (Owner & Admin) */}
+                          <button
+                            onClick={() => handleDelete(m.id, m.name)}
+                            className="p-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg transition-all border border-red-200 shadow-sm"
+                            title="Hapus Mentor"
+                          >
+                            <Trash2 size={16} />
+                          </button>
                         </div>
                       </td>
                     )}

@@ -14,7 +14,10 @@ function roleToPath(role: string) {
   const r = role.toUpperCase()
   if (r === 'OWNER' || r === 'ADMIN') return '/dashboard'
   if (r === 'BENDAHARA') return '/keuangan'
-  if (r === 'MENTOR') return '/jadwal'
+  
+  // 🔥 PERUBAHAN DI SINI: Diarahkan ke /mentor/me
+  if (r === 'MENTOR') return '/mentor/me' 
+  
   return '/login'
 }
 
@@ -46,7 +49,7 @@ export default function Page() {
         // Simpan sesi
         login({ user: data.user, session: data.session })
 
-        // Redirect
+        // Redirect sesuai role
         router.push(roleToPath(data.user.role))
         
       } catch (err: any) {
@@ -62,7 +65,7 @@ export default function Page() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="text-white font-medium mb-2 text-sm">Username or Email</label>
+            <label className="text-white font-medium mb-2 text-sm">Email</label>
             <div className="mt-2">
               <Input
                 aria-label="username or email"
