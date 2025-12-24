@@ -54,12 +54,20 @@ async function getSalaries(req, res) {
                 const finalAmount = salaryRecord.total_amount 
                     || ((finalSessions * m.salary_per_session) + (salaryRecord.bonus || 0) - (salaryRecord.deduction || 0))
 
+                // ✅ AUDIT FIX: Selalu sertakan data real-time untuk perbandingan
+                const isOutOfSync = isPaid && (realSessionCount !== salaryRecord.total_sessions)
+
                 return { 
                     ...salaryRecord, 
                     mentor_name: m.name,
                     target_sessions: targetSessions,
                     total_sessions: finalSessions,
-                    total_amount: finalAmount
+                    total_amount: finalAmount,
+                    // ✅ TAMBAHAN: Data audit untuk sinkronisasi
+                    realtime_sessions: realSessionCount,
+                    recorded_sessions: salaryRecord.total_sessions,
+                    is_out_of_sync: isOutOfSync,
+                    sync_difference: realSessionCount - salaryRecord.total_sessions
                 }
             } else {
                 // Return data virtual (belum ada di tabel salaries)
@@ -103,32 +111,22 @@ async function getMySalaries(req, res) {
     try {
         const authUserId = req.user.id // UUID dari token JWT Supabase
 
-        // 1. Cari ID Mentor di tabel 'mentors' yang kolom 'user_id'-nya cocok
-        // Agar data tidak kosong jika ID Mentor berbeda dengan ID Auth
+        // ✅ SECURITY FIX: Proper mentor ID verification
         const { data: mentor, error: mentorErr } = await supabase
             .from('mentors')
             .select('id, name')
-            .eq('user_id', authUserId)
+            .eq('id', authUserId) // Use direct ID match instead of user_id
             .single()
 
-        // Fallback: Jika kolom 'user_id' belum diisi, coba cari berdasarkan 'id' langsung
-        let mentorId = mentor?.id
-        let mentorName = mentor?.name
-
-        if (!mentor) {
-            const { data: fallbackMentor } = await supabase
-                .from('mentors')
-                .select('id, name')
-                .eq('id', authUserId)
-                .single()
-            
-            mentorId = fallbackMentor?.id
-            mentorName = fallbackMentor?.name
+        // ✅ SECURITY: Jika mentor tidak ditemukan, REJECT request
+        if (!mentor || !mentor.id) {
+            return res.status(403).json({ 
+                error: 'Anda tidak memiliki akses ke data gaji. Hubungi administrator untuk setup profil mentor Anda dengan benar.' 
+            })
         }
 
-        if (!mentorId) {
-            return res.status(404).json({ error: 'Profil mentor tidak ditemukan. Pastikan user login sudah terhubung ke data mentor.' })
-        }
+        const mentorId = mentor.id
+        const mentorName = mentor.name
 
         // 2. Ambil data gaji dari tabel salaries
         const { data: salaries, error } = await supabase
@@ -174,16 +172,45 @@ async function saveSalaryDraft(req, res) {
     try {
         const { mentor_id, month, year, total_sessions, salary_per_session, bonus, deduction } = req.body
 
+        // ✅ SECURITY FIX: Input validation
+        if (!mentor_id || !month || !year) {
+            return res.status(400).json({ error: 'Data wajib tidak lengkap: mentor_id, month, year' })
+        }
+
+        // ✅ SECURITY FIX: Type and range validation
+        const monthNum = parseInt(month)
+        const yearNum = parseInt(year)
+        const sessionsNum = parseInt(total_sessions) || 0
+        const salaryNum = parseFloat(salary_per_session) || 0
+        const bonusNum = parseFloat(bonus) || 0
+        const deductionNum = parseFloat(deduction) || 0
+
+        if (isNaN(monthNum) || monthNum < 1 || monthNum > 12) {
+            return res.status(400).json({ error: 'Month harus antara 1-12' })
+        }
+
+        if (isNaN(yearNum) || yearNum < 2020 || yearNum > 2030) {
+            return res.status(400).json({ error: 'Year harus antara 2020-2030' })
+        }
+
+        if (sessionsNum < 0 || sessionsNum > 50) {
+            return res.status(400).json({ error: 'Total sessions harus antara 0-50' })
+        }
+
+        if (salaryNum < 0 || salaryNum > 10000000) {
+            return res.status(400).json({ error: 'Salary per session tidak valid' })
+        }
+
         const { data, error } = await supabase
             .from('salaries')
             .upsert({
                 mentor_id,
-                month: Number(month),
-                year: Number(year),
-                total_sessions: Number(total_sessions) || 0,
-                salary_per_session: Number(salary_per_session) || 0,
-                bonus: Number(bonus) || 0,
-                deduction: Number(deduction) || 0,
+                month: monthNum,
+                year: yearNum,
+                total_sessions: sessionsNum,
+                salary_per_session: salaryNum,
+                bonus: bonusNum,
+                deduction: deductionNum,
                 status: 'PENDING' // Setelah disimpan draft, status jadi PENDING (Siap bayar)
             }, { 
                 onConflict: 'mentor_id, month, year' 
@@ -194,7 +221,8 @@ async function saveSalaryDraft(req, res) {
         return res.json({ message: 'Draft gaji berhasil disimpan', data })
 
     } catch (err) {
-        return res.status(500).json({ error: err.message })
+        console.error('Save salary draft error:', err)
+        return res.status(500).json({ error: 'Gagal menyimpan draft gaji' })
     }
 }
 
@@ -261,4 +289,66 @@ async function paySalary(req, res) {
     }
 }
 
-module.exports = { getSalaries, getMySalaries, saveSalaryDraft, paySalary }
+// =========================================================
+// 5. RECALCULATE SALARY (OWNER/BENDAHARA) - AUDIT FIX
+// =========================================================
+async function recalculateSalary(req, res) {
+    try {
+        const { id } = req.params // ID dari tabel salaries
+        
+        // 1. Ambil data salary yang akan direcalculate
+        const { data: salaryData, error: errFetch } = await supabase
+            .from('salaries')
+            .select(`*, mentors(salary_per_session)`)
+            .eq('id', id)
+            .single()
+        
+        if (errFetch || !salaryData) {
+            return res.status(404).json({ error: 'Data gaji tidak ditemukan.' })
+        }
+
+        // 2. Hitung ulang sesi real-time dari attendance
+        const { count: actualSessions, error: countErr } = await supabase
+            .from('attendance')
+            .select('*', { count: 'exact', head: true })
+            .eq('mentor_id', salaryData.mentor_id)
+            .eq('month', salaryData.month)
+            .eq('year', salaryData.year)
+            .eq('status', 'HADIR')
+
+        if (countErr) throw countErr
+
+        const realSessionCount = actualSessions || 0
+        const salaryPerSession = salaryData.mentors?.salary_per_session || 0
+        
+        // 3. Hitung ulang total amount
+        const newTotalAmount = (realSessionCount * salaryPerSession) + 
+                              (salaryData.bonus || 0) - 
+                              (salaryData.deduction || 0)
+
+        // 4. Update data di tabel salaries
+        const { error: errUpdate } = await supabase
+            .from('salaries')
+            .update({ 
+                total_sessions: realSessionCount,
+                total_amount: newTotalAmount,
+                updated_at: new Date()
+            })
+            .eq('id', id)
+
+        if (errUpdate) throw errUpdate
+
+        return res.json({ 
+            message: 'Data gaji berhasil direcalculate',
+            old_sessions: salaryData.total_sessions,
+            new_sessions: realSessionCount,
+            old_amount: salaryData.total_amount,
+            new_amount: newTotalAmount
+        })
+
+    } catch (err) {
+        return res.status(500).json({ error: err.message })
+    }
+}
+
+module.exports = { getSalaries, getMySalaries, saveSalaryDraft, paySalary, recalculateSalary }

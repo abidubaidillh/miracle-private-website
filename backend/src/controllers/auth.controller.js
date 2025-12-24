@@ -255,7 +255,7 @@ async function registerInternal(req, res) {
                     console.error("❌ Gagal sync ke tabel mentors:", mentorError);
                     return res.status(500).json({ error: 'User dibuat, tapi gagal simpan data mentor: ' + mentorError.message })
                 } else {
-                    console.log(`✅ Sukses buat mentor: ${username}, Mapel: ${finalSubject}`);
+                    // Mentor created successfully
                 }
             } catch (err) {
                 console.error("Crash sync mentors:", err);

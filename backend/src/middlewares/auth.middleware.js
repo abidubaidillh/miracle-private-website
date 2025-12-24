@@ -64,10 +64,12 @@ const authMiddleware = async (req, res, next) => {
         if (userData && userData.role) {
             userRole = userData.role.toUpperCase()
         } else {
-            console.warn(`[Auth] User ${userAuth.email} tidak ditemukan di tabel public.users`)
+            console.error(`[Auth] User ${userAuth.email} tidak ditemukan atau tidak memiliki role di tabel public.users`)
+            return res.status(403).json({ error: 'User role tidak ditemukan. Silakan hubungi administrator.' }) // ✅ SECURITY FIX: Tolak akses jika role tidak ditemukan
         }
     } catch (err) {
         console.error("Gagal fetch role user:", err)
+        return res.status(500).json({ error: 'Gagal memverifikasi role user. Silakan coba lagi.' }) // ✅ SECURITY FIX: Generic error message
     }
 
     // 5. Attach ke request

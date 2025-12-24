@@ -15,8 +15,8 @@ function roleToPath(role: string) {
   if (r === 'OWNER' || r === 'ADMIN') return '/dashboard'
   if (r === 'BENDAHARA') return '/keuangan'
   
-  // 🔥 PERUBAHAN DI SINI: Diarahkan ke /mentor/me
-  if (r === 'MENTOR') return '/mentor/me' 
+  // 🔥 PERUBAHAN DI SINI: Diarahkan ke /absensi
+  if (r === 'MENTOR') return '/absensi' 
   
   return '/login'
 }

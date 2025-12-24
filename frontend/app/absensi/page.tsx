@@ -2,12 +2,20 @@
 
 import React, { useState, useEffect } from 'react'
 import DashboardLayout from '@/components/DashboardLayout'
-import { Calendar, User, BookOpen, Clock, CheckCircle } from 'lucide-react'
+import { Calendar, User, Camera, Upload, X, CheckCircle } from 'lucide-react'
 import { useUser } from '@/context/UserContext'
 import { useLoading } from '@/context/LoadingContext'
 import { getAuthToken } from '@/lib/auth'
+import AttendanceTable from '@/components/Attendance/AttendanceTable'
+import { createClient } from '@supabase/supabase-js'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api'
+
+// Initialize Supabase client
+const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
 
 export default function AbsensiPage() {
     const { user } = useUser()
@@ -19,7 +27,14 @@ export default function AbsensiPage() {
     
     // State Data (Default array kosong)
     const [schedules, setSchedules] = useState<any[]>([])
-
+    
+    // Photo upload states
+    const [selectedFile, setSelectedFile] = useState<File | null>(null)
+    const [photoPreview, setPhotoPreview] = useState<string | null>(null)
+    const [isUploading, setIsUploading] = useState(false)
+    const [showPhotoModal, setShowPhotoModal] = useState(false)
+    const [selectedSchedule, setSelectedSchedule] = useState<any>(null)
+    const [selectedSession, setSelectedSession] = useState<number>(0)
     // --- FETCH DATA ---
     const fetchAbsensi = async () => {
         if (!user) return
@@ -61,49 +76,120 @@ export default function AbsensiPage() {
     // Load saat komponen siap atau filter berubah
     useEffect(() => { if(user) fetchAbsensi() }, [user, month, year])
 
-    // --- HANDLE KLIK ABSEN ---
-    const handleToggleSession = async (schedule: any, sessionNum: number) => {
-        // 1. Optimistic Update (Ubah UI duluan biar cepat)
-        const originalSchedules = [...schedules] 
-        
-        const updatedSchedules = schedules.map(s => {
-            if(s.id === schedule.id) {
-                const newSessions = s.sessions_status.map((sess: any) => 
-                    sess.number === sessionNum ? { ...sess, is_done: !sess.is_done } : sess
-                )
-                
-                const newTotalDone = newSessions.filter((ns:any) => ns.is_done).length
-                
-                return { ...s, sessions_status: newSessions, total_done: newTotalDone }
-            }
-            return s
-        })
-        setSchedules(updatedSchedules)
+    // --- PHOTO UPLOAD FUNCTIONS ---
+    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (file) {
+            setSelectedFile(file)
+            const reader = new FileReader()
+            reader.onload = (e) => setPhotoPreview(e.target?.result as string)
+            reader.readAsDataURL(file)
+        }
+    }
 
-        // 2. Kirim ke Backend
+    const uploadPhoto = async (): Promise<string | null> => {
+        if (!selectedFile || !user) return null
+
+        try {
+            setIsUploading(true)
+            
+            // Generate unique filename
+            const fileExt = selectedFile.name.split('.').pop()
+            const fileName = `${user.id}_${Date.now()}.${fileExt}`
+            
+            // Upload to Supabase Storage
+            const { data, error } = await supabase.storage
+                .from('absensi_mentors')
+                .upload(fileName, selectedFile)
+
+            if (error) {
+                console.error('Detail Error Supabase:', error)
+                throw error
+            }
+
+            // Get public URL
+            const { data: { publicUrl } } = supabase.storage
+                .from('absensi_mentors')
+                .getPublicUrl(fileName)
+
+            return publicUrl
+
+        } catch (error) {
+            console.error('Detail Error Supabase:', error)
+            alert('Gagal mengupload foto: ' + (error as any).message)
+            return null
+        } finally {
+            setIsUploading(false)
+        }
+    }
+
+    // --- HANDLE ATTENDANCE SUBMISSION ---
+    const handleAttendanceSubmit = async (schedule: any, sessionNumber: number) => {
+        if (user?.role === 'MENTOR') {
+            // For mentors, show photo upload modal
+            setSelectedSchedule(schedule)
+            setSelectedSession(sessionNumber)
+            setShowPhotoModal(true)
+        } else {
+            // For admin/owner, direct submit without photo
+            await submitAttendance(schedule, sessionNumber, null)
+        }
+    }
+
+    const submitAttendance = async (schedule: any, sessionNumber: number, photoUrl: string | null) => {
         try {
             const token = getAuthToken()
-            const res = await fetch(`${API_URL}/attendance/toggle`, {
+            
+            const response = await fetch(`${API_URL}/attendance/submit`, {
                 method: 'POST',
-                headers: { 
+                headers: {
                     'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}` 
+                    Authorization: `Bearer ${token}`
                 },
                 body: JSON.stringify({
                     schedule_id: schedule.id,
                     mentor_id: schedule.mentors.id,
-                    session_number: sessionNum,
-                    month, 
+                    session_number: sessionNumber,
+                    month,
                     year,
-                    status: 'HADIR'
+                    status: 'HADIR',
+                    bukti_foto: photoUrl
                 })
             })
 
-            if (!res.ok) throw new Error("Gagal menyimpan ke server")
+            const result = await response.json()
 
-        } catch (err) {
-            alert("Gagal menyimpan absensi, koneksi bermasalah.")
-            setSchedules(originalSchedules) // Revert jika gagal
+            if (!response.ok) {
+                throw new Error(result.error || 'Gagal menyimpan absensi')
+            }
+
+            // Refresh data
+            await fetchAbsensi()
+            
+            // Reset states
+            setShowPhotoModal(false)
+            setSelectedFile(null)
+            setPhotoPreview(null)
+            setSelectedSchedule(null)
+            setSelectedSession(0)
+
+            alert('Absensi berhasil disimpan!')
+
+        } catch (error) {
+            console.error('Error submitting attendance:', error)
+            alert('Gagal menyimpan absensi: ' + (error as any).message)
+        }
+    }
+
+    const handlePhotoSubmit = async () => {
+        if (!selectedFile) {
+            alert('Silakan pilih foto terlebih dahulu')
+            return
+        }
+
+        const photoUrl = await uploadPhoto()
+        if (photoUrl && selectedSchedule) {
+            await submitAttendance(selectedSchedule, selectedSession, photoUrl)
         }
     }
 
@@ -137,78 +223,105 @@ export default function AbsensiPage() {
             </div>
 
             {/* --- CONTENT SECTION --- */}
-            {!Array.isArray(schedules) || schedules.length === 0 ? (
-                <div className="flex flex-col items-center justify-center p-12 bg-white rounded-xl border border-dashed border-gray-300 text-gray-400">
-                    <Calendar size={48} className="mb-4 opacity-50"/>
-                    <p className="font-medium text-lg">Tidak ada jadwal kelas di bulan ini.</p>
-                    {user.role === 'MENTOR' && <p className="text-sm mt-1">Hubungi admin jika jadwal Anda belum muncul.</p>}
-                </div>
-            ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                    {schedules.map((item) => (
-                        <div key={item.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-all flex flex-col h-full group">
-                            
-                            {/* Header Card */}
-                            <div className="bg-[#0077AF] p-4 text-white relative overflow-hidden">
-                                <div className="relative z-10">
-                                    <h3 className="font-bold text-lg">{item.students?.name}</h3>
-                                    <div className="flex items-center gap-2 text-blue-100 text-sm mt-1">
-                                        <BookOpen size={14}/> {item.subject || 'Umum'}
+            <AttendanceTable 
+                schedules={schedules}
+                onAttendanceSubmit={handleAttendanceSubmit}
+                userRole={user.role}
+                isLoading={false}
+            />
+
+            {/* Photo Upload Modal */}
+            {showPhotoModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4 animate-in fade-in duration-300 backdrop-blur-sm">
+                    <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-2xl animate-in slide-in-from-bottom-4 duration-300">
+                        <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-200">
+                            <h3 className="text-lg font-semibold flex items-center gap-2">
+                                <Camera className="text-blue-600" />
+                                Upload Bukti Foto Absensi
+                            </h3>
+                            <button
+                                onClick={() => {
+                                    setShowPhotoModal(false)
+                                    setSelectedFile(null)
+                                    setPhotoPreview(null)
+                                }}
+                                className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
+                                disabled={isUploading}
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+                        
+                        <div className="space-y-4">
+                            {/* File Input */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Pilih Foto <span className="text-red-500">*</span>
+                                </label>
+                                <div className="relative">
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={handleFileSelect}
+                                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                                        disabled={isUploading}
+                                    />
+                                </div>
+                                <p className="text-xs text-gray-500 mt-1">Format: JPG, PNG (Max 5MB)</p>
+                            </div>
+
+                            {/* Preview */}
+                            {photoPreview && (
+                                <div className="animate-in fade-in duration-300">
+                                    <p className="text-sm font-medium text-gray-700 mb-2">Preview:</p>
+                                    <div className="relative">
+                                        <img 
+                                            src={photoPreview} 
+                                            alt="Preview" 
+                                            className="w-full h-48 object-cover rounded-lg border shadow-sm"
+                                        />
+                                        <div className="absolute top-2 right-2">
+                                            <div className="bg-green-500 text-white p-1 rounded-full">
+                                                <CheckCircle size={16} />
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
-                                <BookOpen size={80} className="absolute -bottom-4 -right-4 text-white opacity-10 rotate-12 group-hover:scale-110 transition-transform"/>
-                            </div>
+                            )}
 
-                            {/* Info Card */}
-                            <div className="p-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center text-sm text-gray-600">
-                                <div className="flex items-center gap-2">
-                                    <User size={14}/> <span className="font-medium">{item.mentors?.name}</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <Clock size={14}/> {item.day_of_week}, {item.start_time?.slice(0,5)}
-                                </div>
-                            </div>
-
-                            {/* Body Card: Tombol Sesi */}
-                            <div className="p-5 flex-1 flex flex-col justify-center">
-                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4 text-center">
-                                    Klik Nomor Sesi Untuk Absen
-                                </p>
-                                
-                                <div className="flex flex-wrap justify-center gap-3">
-                                    {item.sessions_status.map((sess: any) => (
-                                        <button
-                                            key={sess.number}
-                                            onClick={() => handleToggleSession(item, sess.number)}
-                                            className={`
-                                                w-10 h-10 rounded-lg flex items-center justify-center font-bold text-sm transition-all shadow-sm border-b-2
-                                                ${sess.is_done 
-                                                    ? 'bg-green-500 border-green-700 text-white scale-110 shadow-green-200' 
-                                                    : 'bg-white border-gray-300 text-gray-400 hover:border-[#0077AF] hover:text-[#0077AF] hover:bg-blue-50'}
-                                            `}
-                                            title={sess.is_done ? `Sesi ${sess.number}: Hadir` : `Absen Sesi ${sess.number}`}
-                                        >
-                                            {sess.is_done ? <CheckCircle size={20}/> : sess.number}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {/* Footer Card: Progress */}
-                            <div className="p-4 bg-gray-50 border-t border-gray-100">
-                                <div className="flex justify-between text-xs mb-1 font-bold text-gray-500">
-                                    <span>Kehadiran</span>
-                                    <span className={item.total_done > 0 ? "text-[#0077AF]" : ""}>{item.total_done} / {item.sessions_status.length}</span>
-                                </div>
-                                <div className="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
-                                    <div 
-                                        className={`h-1.5 rounded-full transition-all duration-500 ${item.total_done === item.sessions_status.length ? 'bg-green-500' : 'bg-[#0077AF]'}`}
-                                        style={{ width: `${(item.total_done / item.sessions_status.length) * 100}%` }}
-                                    ></div>
-                                </div>
+                            {/* Buttons */}
+                            <div className="flex gap-3 pt-4">
+                                <button
+                                    onClick={() => {
+                                        setShowPhotoModal(false)
+                                        setSelectedFile(null)
+                                        setPhotoPreview(null)
+                                    }}
+                                    className="flex-1 px-4 py-3 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-all duration-200 font-medium"
+                                    disabled={isUploading}
+                                >
+                                    Batal
+                                </button>
+                                <button
+                                    onClick={handlePhotoSubmit}
+                                    disabled={!selectedFile || isUploading}
+                                    className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2 font-medium shadow-sm hover:shadow-md"
+                                >
+                                    {isUploading ? (
+                                        <>
+                                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                            Mengupload...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Upload size={16} />
+                                            Submit Absensi
+                                        </>
+                                    )}
+                                </button>
                             </div>
                         </div>
-                    ))}
+                    </div>
                 </div>
             )}
         </DashboardLayout>

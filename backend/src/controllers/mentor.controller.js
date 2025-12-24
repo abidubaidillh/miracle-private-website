@@ -18,8 +18,9 @@ const getAllMentor = async (req, res) => {
       .order('name', { ascending: true })
 
     // 🔐 FILTER: Jika yang login MENTOR, hanya tampilkan data dirinya sendiri
+    // ✅ SECURITY FIX: Gunakan 'user_id' bukan 'id' untuk filter mentor
     if (userRole === 'MENTOR') {
-      query = query.eq('id', userId) 
+      query = query.eq('user_id', userId) 
     }
 
     // Filter Status (AKTIF/NON-AKTIF)
@@ -51,8 +52,6 @@ const getMyProfile = async (req, res) => {
     try {
         const userId = req.user.id 
 
-        console.log("🔹 [DEBUG] Cek Profil untuk User ID:", userId)
-
         // 1. Ambil Data Mentor
         const { data: mentor, error } = await supabase
             .from('mentors')
@@ -64,8 +63,6 @@ const getMyProfile = async (req, res) => {
             console.error("❌ [DEBUG] Data Mentor tidak ditemukan di tabel public.mentors untuk ID:", userId)
             return res.status(404).json({ error: 'Profil mentor tidak ditemukan. ID Login tidak cocok dengan data Mentor.' })
         }
-
-        console.log("✅ [DEBUG] Mentor Ditemukan:", mentor.name)
 
         // 2. 🔥 AMBIL SEMUA JADWAL (MENGGUNAKAN start_time & end_time) 🔥
         const { data: schedules, error: schedError } = await supabase
@@ -86,7 +83,6 @@ const getMyProfile = async (req, res) => {
             console.error("❌ [DEBUG] Error ambil jadwal:", schedError.message)
             // Tidak throw error agar profil tetap terload meski jadwal gagal
         } else {
-            console.log(`✅ [DEBUG] Jumlah Jadwal ditemukan: ${schedules.length}`)
         }
 
         // 3. Ambil Statistik (Sesi Bulan Ini)
@@ -195,14 +191,17 @@ const updateMentor = async (req, res) => {
   }
 
   const allowedFinancialRoles = ['OWNER', 'BENDAHARA']
-  if (!allowedFinancialRoles.includes(userRole)) {
+  const safeUserRole = (userRole || 'GUEST').toUpperCase() // ✅ Default ke GUEST untuk menghindari undefined
+
+  if (!allowedFinancialRoles.includes(safeUserRole)) {
       delete updateData.salary_per_session
+      delete updateData.status // ✅ Mentor juga tidak boleh edit status sendiri
   } else if (updateData.salary_per_session !== undefined) {
       // Pastikan tipe data Integer untuk DB
       updateData.salary_per_session = parseInt(updateData.salary_per_session) || 0
   }
 
-  if (updateData.status) {
+  if (updateData.status && allowedFinancialRoles.includes(safeUserRole)) {
     updateData.status = updateData.status.toUpperCase()
   }
 

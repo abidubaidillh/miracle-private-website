@@ -22,13 +22,16 @@ export default function JadwalPage() {
 
     // Load Data dengan Global Loading Screen
     const fetchData = async () => {
-        await withLoading(async () => {
-            try {
-                const res = await getSchedules()
-                setSchedules(res.schedules || [])
-            } catch (error) {
-                console.error("Gagal mengambil jadwal:", error)
-            }
+    await withLoading(async () => {
+        try {
+            // Jika role Mentor, kita bisa menambahkan parameter mentor_id 
+            // Namun karena Backend sudah kita proteksi di atas, memanggil getSchedules() 
+            // saja sekarang sudah otomatis mengembalikan jadwal miliknya sendiri.
+            const res = await getSchedules(); 
+            setSchedules(res.schedules || []);
+        } catch (error) {
+            console.error("Gagal mengambil jadwal:", error);
+        }
         })
     }
 

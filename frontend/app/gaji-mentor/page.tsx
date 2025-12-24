@@ -5,12 +5,12 @@ import DashboardLayout from '@/components/DashboardLayout'
 import { useRouter } from 'next/navigation'
 import { 
     Calendar, CheckCircle, AlertCircle, CreditCard, 
-    Wallet, UploadCloud, X, Lock, Eye, Download, Loader2, DollarSign
+    Wallet, UploadCloud, X, Lock, Eye, Download, Loader2, DollarSign,
+    RefreshCw, AlertTriangle
 } from 'lucide-react'
 import { useUser } from '@/context/UserContext'
 import { useLoading } from '@/context/LoadingContext'
-// ✅ Import action sesuai dengan struktur file salaryActions.ts
-import { getSalaries, getMySalaries, saveSalaryDraft, paySalary } from '@/lib/salaryActions'
+import { getSalaries, getMySalaries, saveSalaryDraft, paySalary, uploadSalaryProof, recalculateSalary } from '@/lib/salaryActions'
 
 // --- HELPER FORMAT RUPIAH ---
 const formatRupiah = (num: number) => {
@@ -77,8 +77,8 @@ const PayModal = ({ isOpen, onClose, onConfirm, salaryData, isUploading }: any) 
     }
 
     return (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 backdrop-blur-sm px-4">
-            <div className="bg-white rounded-xl w-full max-w-md p-6 shadow-2xl">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] backdrop-blur-sm px-4 animate-in fade-in duration-300">
+            <div className="bg-white rounded-xl w-full max-w-md p-6 shadow-2xl animate-in slide-in-from-bottom-4 duration-300">
                 <div className="flex justify-between items-center mb-6 border-b pb-4">
                     <h3 className="font-bold text-lg text-gray-800">Konfirmasi Pembayaran</h3>
                     <button onClick={onClose} disabled={isUploading}><X size={20} className="text-gray-400 hover:text-red-500 transition"/></button>
@@ -215,21 +215,56 @@ export default function GajiMentorPage() {
     }
 
     const handleConfirmPay = async (id: string, proofFile: File) => {
-        setIsUploading(true)
-        try {
-            const proofUrl = await mockUploadService(proofFile)
-            // ✅ Menggunakan proofUrl hasil mock service
-            await paySalary(id, proofUrl)
-            
-            setPayModalOpen(false)
-            setSelectedSalary(null)
-            fetchData()
-            alert("Pembayaran Berhasil Dicatat!")
-        } catch (e: any) { 
-            alert("Error: " + e.message) 
-        } finally {
-            setIsUploading(false)
+        // 1. Validasi awal: Pastikan ID dan File ada
+        if (!id || !proofFile) {
+            alert("Data pembayaran atau file bukti tidak ditemukan.");
+            return;
         }
+
+        // 2. Aktifkan loading state agar tombol tidak bisa diklik dua kali
+        setIsUploading(true);
+
+        try {
+            // 3. Langkah Pertama: Upload file fisik ke Supabase Storage
+            // Fungsi ini akan mengembalikan Public URL permanen (https://...)
+            const proofUrl = await uploadSalaryProof(proofFile);
+            
+            // 4. Langkah Kedua: Simpan URL tersebut ke Database melalui API Backend
+            // Kita mengirim ID Gaji (dari tabel salaries) dan link gambar tadi
+            await paySalary(id, proofUrl);
+            
+            // 5. Jika sukses: Tutup modal dan reset selection
+            setPayModalOpen(false);
+            setSelectedSalary(null);
+            
+            // 6. Refresh data di tabel agar status berubah menjadi 'PAID' dan bukti muncul
+            await fetchData();
+            
+            alert("Pembayaran Berhasil Dicatat");
+
+        } catch (e: any) { 
+            // Tangani error baik dari Storage maupun dari API Backend
+            console.error("Gagal memproses pembayaran:", e);
+            alert("Gagal memproses pembayaran: " + (e.message || "Terjadi kesalahan sistem")); 
+        } finally {
+            // 7. Matikan loading state apa pun hasilnya (sukses/gagal)
+            setIsUploading(false);
+        }
+    };
+
+    // ✅ AUDIT FIX: Fungsi recalculate
+    const handleRecalculate = async (salaryId: string, mentorName: string) => {
+        if (!confirm(`Recalculate gaji ${mentorName}? Data akan diperbarui sesuai absensi terkini.`)) return
+
+        await withLoading(async () => {
+            try {
+                const result = await recalculateSalary(salaryId)
+                alert(`Recalculate berhasil!\nSesi lama: ${result.old_sessions} → Sesi baru: ${result.new_sessions}`)
+                await fetchData()
+            } catch (e: any) {
+                alert("Gagal recalculate: " + e.message)
+            }
+        })
     }
 
     const openViewProof = (salary: any) => {
@@ -298,13 +333,31 @@ export default function GajiMentorPage() {
                             <tr><td colSpan={isMentor ? 6 : 7} className="p-12 text-center text-gray-400 font-medium">Tidak ada data gaji.</td></tr>
                         ) : salaries.map((s) => {
                             const isPaid = s.status === 'PAID'
+                            const isOutOfSync = s.is_out_of_sync || false
+                            const syncDiff = s.sync_difference || 0
                             
                             return (
                                 <tr key={s.mentor_id || s.id} className="hover:bg-gray-50 transition-colors">
                                     {!isMentor && <td className="px-6 py-4 font-bold text-gray-800">{s.mentor_name}</td>}
                                     <td className="px-6 py-4 text-sm text-gray-600 font-mono">{formatRupiah(s.salary_per_session)}</td>
                                     <td className="px-6 py-4 text-center font-bold text-[#0077AF] bg-blue-50/30">
-                                        <div className="flex items-center justify-center gap-1">{s.total_sessions} <Lock size={12} className="text-gray-400" /></div>
+                                        <div className="flex items-center justify-center gap-2">
+                                            <span>{s.total_sessions}</span>
+                                            {isOutOfSync && (
+                                                <div className="relative group">
+                                                    <AlertTriangle size={16} className="text-orange-500 cursor-help animate-pulse" />
+                                                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-200 whitespace-nowrap z-10 shadow-lg">
+                                                        <div className="text-center">
+                                                            <div className="font-semibold text-orange-300">⚠️ Data Tidak Sinkron</div>
+                                                            <div className="mt-1">Real: {s.realtime_sessions} | Recorded: {s.recorded_sessions}</div>
+                                                            <div className="text-orange-200">Selisih: {syncDiff > 0 ? '+' : ''}{syncDiff} sesi</div>
+                                                        </div>
+                                                        <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+                                                    </div>
+                                                </div>
+                                            )}
+                                            <Lock size={12} className="text-gray-400" />
+                                        </div>
                                     </td>
                                     <td className="px-6 py-4">
                                         <input 
@@ -333,9 +386,20 @@ export default function GajiMentorPage() {
                                                 <CreditCard size={14}/> Bayar
                                             </button>
                                         ) : isPaid ? (
-                                            <button onClick={() => openViewProof(s)} className="text-green-600 font-bold text-xs hover:underline flex items-center justify-center gap-1 mx-auto">
-                                                <Eye size={14}/> Bukti
-                                            </button>
+                                            <div className="flex items-center justify-center gap-2">
+                                                <button onClick={() => openViewProof(s)} className="text-green-600 font-bold text-xs hover:underline flex items-center justify-center gap-1">
+                                                    <Eye size={14}/> Bukti
+                                                </button>
+                                                {canEdit && isOutOfSync && (
+                                                    <button 
+                                                        onClick={() => handleRecalculate(s.id, s.mentor_name)}
+                                                        className="bg-orange-500 hover:bg-orange-600 text-white px-2 py-1 rounded text-xs font-bold flex items-center gap-1"
+                                                        title="Recalculate berdasarkan absensi terkini"
+                                                    >
+                                                        <RefreshCw size={12}/> Sync
+                                                    </button>
+                                                )}
+                                            </div>
                                         ) : ( <span className="text-xs text-gray-400">-</span> )}
                                     </td>
                                 </tr>

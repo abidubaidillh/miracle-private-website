@@ -72,7 +72,7 @@ const createMurid = async (req, res) => {
     // ==========================================================
     // 🚨 DEBUGGING: LOG BODY REQUEST
     // ==========================================================
-    console.log('[MuridController: createMurid] Request Body Received:', req.body);
+    // Removed console.log for production
     // ==========================================================
 
     // Validasi Wajib Isi (Update: Menambahkan parent_name & parent_phone sebagai wajib isi jika diinginkan)

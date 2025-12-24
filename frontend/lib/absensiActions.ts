@@ -17,7 +17,7 @@ export async function getAttendance(filters: any = {}) {
 
 export async function submitAttendance(data: any) {
   const res = await fetchWithAuth(API_ATTENDANCE_URL, {
-    method: 'POST',
+    method: 'POST', 
     body: JSON.stringify(data),
   });
 

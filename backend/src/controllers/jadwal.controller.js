@@ -3,8 +3,11 @@ const supabase = require('../config/supabase');
 
 // --- A. GET (Read All with Filtering) ---
 const getAllJadwal = async (req, res) => {
-    // Menggunakan 'date' sebagai filter utama
     const { date, mentor_id, student_id } = req.query;
+    
+    // 🛡️ Ambil info user dari middleware auth
+    const userRole = req.user.role;
+    const authUserId = req.user.id;
 
     try {
         let query = supabase
@@ -12,28 +15,44 @@ const getAllJadwal = async (req, res) => {
             .select(`
                 *,
                 students ( id, name ),
-                mentors ( id, name, phone_number ) 
+                mentors ( id, name, phone_number, user_id ) 
             `)
-            .order('date', { ascending: true }) // Urutkan tanggal terdekat
+            .order('date', { ascending: true })
             .order('start_time', { ascending: true });
 
-        // ✅ LOGIKA BARU: Filter berdasarkan TANGGAL SPESIFIK (YYYY-MM-DD)
+        // ✅ LOGIKA KEAMANAN: Jika Mentor, paksa filter berdasarkan profilnya
+        if (userRole === 'MENTOR') {
+            // 1. Cari dulu ID Mentor di tabel 'mentors' yang punya user_id ini
+            const { data: mentorData } = await supabase
+                .from('mentors')
+                .select('id')
+                .eq('user_id', authUserId)
+                .single();
+
+            if (mentorData) {
+                query = query.eq('mentor_id', mentorData.id);
+            } else {
+                // Jika data mentor tidak ditemukan di tabel public.mentors
+                // Gunakan ID login sebagai fallback (jika UUID disamakan)
+                query = query.eq('mentor_id', authUserId);
+            }
+        } else {
+            // Jika Admin/Owner, biarkan filter mentor_id opsional (dari query string)
+            if (mentor_id) query = query.eq('mentor_id', mentor_id);
+        }
+
+        // Filter Tambahan
         if (date) query = query.eq('date', date);
-        
-        if (mentor_id) query = query.eq('mentor_id', mentor_id);
         if (student_id) query = query.eq('student_id', student_id);
 
         const { data, error } = await query;
 
-        if (error) {
-            console.error("[JadwalController] Error Fetch:", error);
-            return res.status(500).json({ message: "Gagal ambil jadwal", error: error.message });
-        }
-
+        if (error) throw error;
         res.status(200).json({ schedules: data });
 
     } catch (err) {
-        res.status(500).json({ message: "Server Error", error: err.message });
+        console.error("[JadwalController] Error:", err.message);
+        res.status(500).json({ message: "Gagal ambil jadwal", error: err.message });
     }
 };
 

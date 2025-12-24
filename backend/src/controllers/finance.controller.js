@@ -17,7 +17,7 @@ async function getFinanceSummary(req, res) {
         const totalIncome = incomeData.reduce((sum, item) => sum + (item.amount || 0), 0)
 
         // 2. QUERY PENGELUARAN
-        // A. Operasional
+        // A. Operasional dari tabel transactions (existing)
         const { data: operationalData } = await supabase
             .from('transactions')
             .select('amount')
@@ -26,7 +26,15 @@ async function getFinanceSummary(req, res) {
         
         const operationalExpense = operationalData ? operationalData.reduce((sum, item) => sum + (item.amount || 0), 0) : 0
 
-        // B. Gaji Mentor (Sudah Lunas Bulan Ini)
+        // B. Biaya Operasional dari tabel operasional (NEW)
+        const { data: biayaOperasionalData } = await supabase
+            .from('operasional')
+            .select('jumlah')
+            .gte('tanggal', firstDayOfMonth)
+
+        const biayaOperasional = biayaOperasionalData ? biayaOperasionalData.reduce((sum, item) => sum + (item.jumlah || 0), 0) : 0
+
+        // C. Gaji Mentor (Sudah Lunas Bulan Ini)
         const { data: salaryData } = await supabase
             .from('salaries')
             .select('total_amount')
@@ -34,7 +42,7 @@ async function getFinanceSummary(req, res) {
             .gte('payment_date', firstDayOfMonth)
 
         const salaryExpense = salaryData ? salaryData.reduce((sum, item) => sum + (item.total_amount || 0), 0) : 0
-        const totalExpense = operationalExpense + salaryExpense
+        const totalExpense = operationalExpense + biayaOperasional + salaryExpense
 
         // 3. ACTIONABLE ITEMS (PENDING)
         // A. Tagihan Murid Belum Lunas
@@ -79,7 +87,12 @@ async function getFinanceSummary(req, res) {
             .from('transactions')
             .select('id, date, amount, description, categories(name)')
             .eq('type', 'EXPENSE')
-            .order('date', { ascending: false }).limit(10)
+            .order('date', { ascending: false }).limit(5)
+
+        const { data: recentBiayaOps } = await supabase
+            .from('operasional')
+            .select('id, tanggal, jumlah, nama_pengeluaran, kategori_operasional(nama_kategori)')
+            .order('tanggal', { ascending: false }).limit(5)
 
         const { data: recentSalaries } = await supabase
             .from('salaries')
@@ -101,6 +114,13 @@ async function getFinanceSummary(req, res) {
                 category: o.categories?.name || 'Operasional',
                 type: 'EXPENSE',
                 amount: o.amount
+            })),
+            ...(recentBiayaOps || []).map(b => ({
+                date: b.tanggal,
+                description: b.nama_pengeluaran,
+                category: b.kategori_operasional?.nama_kategori || 'Biaya Operasional',
+                type: 'EXPENSE',
+                amount: b.jumlah
             })),
             ...(recentSalaries || []).map(s => ({
                 date: s.payment_date,

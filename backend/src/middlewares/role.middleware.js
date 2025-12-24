@@ -23,13 +23,9 @@ module.exports = function allowedRoles(roles) {
         role = data.role
       }
 
-      // 2️⃣ Fallback userStore
+      // ✅ SECURITY FIX: Hapus fallback ke userStore (rentan tampering)
       if (!role) {
-        role = userStore.getRole(req.user.id)
-      }
-
-      if (!role) {
-        return res.status(403).json({ error: 'role not found' })
+        return res.status(403).json({ error: 'User role tidak ditemukan di database.' })
       }
 
       // ✅ SIMPAN ROLE KE req.user

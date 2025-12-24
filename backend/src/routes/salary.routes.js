@@ -34,4 +34,11 @@ router.post(
     controller.paySalary
 )
 
+// 5. Recalculate Gaji (Owner, Bendahara) - AUDIT FIX
+router.post(
+    '/:id/recalculate', 
+    allowedRoles(['OWNER', 'BENDAHARA']), 
+    controller.recalculateSalary
+)
+
 module.exports = router

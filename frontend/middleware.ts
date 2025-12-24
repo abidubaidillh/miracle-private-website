@@ -98,7 +98,7 @@ export function middleware(req: NextRequest) {
             pathname.startsWith('/paket-kelas') ||
             pathname.startsWith('/kelola-user')
         ) {
-            return NextResponse.redirect(new URL('/mentor/me', req.url))
+            return NextResponse.redirect(new URL('/absensi', req.url))
         }
       }
 
@@ -137,7 +137,7 @@ function getRoleDefaultPath(role: string): string {
     case 'BENDAHARA':
       return '/keuangan' // ✅ Bendahara default ke Dashboard Keuangan
     case 'MENTOR':
-      return '/mentor/me'
+      return '/absensi'
     default:
       return '/login'
   }

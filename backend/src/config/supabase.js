@@ -8,13 +8,13 @@ const SUPABASE_URL = process.env.SUPABASE_URL;
 // Pastikan nama variabel lingkungan di .env Anda adalah SUPABASE_SERVICE_ROLE_KEY
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY; 
 
-// 1. DEBUGGING: Verifikasi apakah variabel lingkungan dibaca
-console.log('--- SUPABASE BACKEND CONFIG DEBUG ---');
-console.log('1. URL Loaded:', !!SUPABASE_URL); 
-console.log('2. KEY Loaded:', !!SUPABASE_KEY); 
-// Menampilkan 10 karakter pertama key (untuk verifikasi jenis key)
-console.log('3. KEY Prefix:', SUPABASE_KEY ? SUPABASE_KEY.substring(0, 10) : 'N/A'); 
-console.log('-----------------------------------');
+// 1. PRODUCTION SECURITY: Remove sensitive logging
+if (process.env.NODE_ENV !== 'production') {
+    console.log('--- SUPABASE BACKEND CONFIG DEBUG ---');
+    console.log('1. URL Loaded:', !!SUPABASE_URL); 
+    console.log('2. KEY Loaded:', !!SUPABASE_KEY); 
+    console.log('-----------------------------------');
+}
 
 
 // 2. Validasi Kritis

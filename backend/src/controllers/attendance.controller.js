@@ -33,7 +33,7 @@ async function getAttendanceDashboard(req, res) {
         // --- 2. Ambil data absensi ---
         const { data: attendanceData, error: errAtt } = await supabase
             .from('attendance')
-            .select('schedule_id, session_number, status, date')
+            .select('schedule_id, session_number, status, date, bukti_foto')
             .eq('month', curMonth)
             .eq('year', curYear)
 
@@ -51,7 +51,8 @@ async function getAttendanceDashboard(req, res) {
                     number: i,
                     is_done: !!record,
                     status: record ? record.status : null,
-                    date_recorded: record ? record.date : null
+                    date_recorded: record ? record.date : null,
+                    bukti_foto: record ? record.bukti_foto : null
                 })
             }
 
@@ -69,7 +70,94 @@ async function getAttendanceDashboard(req, res) {
     }
 }
 
-// 2. Toggle Absensi
+// 2. Submit Absensi dengan Foto Bukti (URL dari frontend)
+async function submitAttendance(req, res) {
+    try {
+        const { schedule_id, mentor_id, session_number, month, year, status, bukti_foto } = req.body
+
+        // ✅ SECURITY FIX: Input validation
+        if (!schedule_id || !mentor_id || !session_number || !month || !year || !status) {
+            return res.status(400).json({ 
+                error: 'Data wajib tidak lengkap: schedule_id, mentor_id, session_number, month, year, status' 
+            })
+        }
+
+        // ✅ SECURITY FIX: Type validation
+        const sessionNum = parseInt(session_number)
+        const monthNum = parseInt(month)
+        const yearNum = parseInt(year)
+
+        if (isNaN(sessionNum) || sessionNum < 1 || sessionNum > 20) {
+            return res.status(400).json({ error: 'Session number harus antara 1-20' })
+        }
+
+        if (isNaN(monthNum) || monthNum < 1 || monthNum > 12) {
+            return res.status(400).json({ error: 'Month harus antara 1-12' })
+        }
+
+        if (isNaN(yearNum) || yearNum < 2020 || yearNum > 2030) {
+            return res.status(400).json({ error: 'Year harus antara 2020-2030' })
+        }
+
+        // ✅ SECURITY FIX: Status validation
+        const validStatuses = ['HADIR', 'IZIN', 'ALPA']
+        if (!validStatuses.includes(status)) {
+            return res.status(400).json({ error: 'Status harus HADIR, IZIN, atau ALPA' })
+        }
+
+        // Validasi: Jika status HADIR dan role MENTOR, bukti_foto wajib
+        if (status === 'HADIR' && req.user?.role === 'MENTOR' && !bukti_foto) {
+            return res.status(400).json({ 
+                error: 'Bukti foto wajib diupload untuk status HADIR' 
+            })
+        }
+
+        // Cek duplicate
+        const { data: existing } = await supabase
+            .from('attendance')
+            .select('id')
+            .eq('schedule_id', schedule_id)
+            .eq('session_number', sessionNum)
+            .eq('month', monthNum)
+            .eq('year', yearNum)
+            .single()
+
+        if (existing) {
+            return res.status(400).json({ 
+                error: 'Absensi untuk sesi ini sudah tercatat' 
+            })
+        }
+
+        // Simpan absensi dengan bukti_foto URL
+        const { data, error } = await supabase
+            .from('attendance')
+            .insert([{
+                schedule_id,
+                mentor_id,
+                session_number: sessionNum,
+                month: monthNum,
+                year: yearNum,
+                status,
+                bukti_foto, // URL dari Supabase Storage
+                date: new Date()
+            }])
+            .select()
+
+        if (error) throw error
+
+        return res.json({ 
+            status: 'SUCCESS', 
+            message: 'Absensi berhasil disimpan',
+            data: data[0]
+        })
+
+    } catch (err) {
+        console.error('Submit attendance error:', err)
+        return res.status(500).json({ error: 'Gagal menyimpan absensi' })
+    }
+}
+
+// 3. Toggle Absensi (Legacy - untuk backward compatibility)
 async function toggleAttendance(req, res) {
     try {
         const { schedule_id, mentor_id, session_number, month, year, status } = req.body
@@ -89,7 +177,7 @@ async function toggleAttendance(req, res) {
             await supabase.from('attendance').delete().eq('id', existing.id)
             return res.json({ status: 'REMOVED', message: 'Absensi dibatalkan' })
         } else {
-            // Simpan (Hadir)
+            // Simpan (Hadir) - tanpa bukti foto untuk backward compatibility
             await supabase.from('attendance').insert([{
                 schedule_id,
                 mentor_id,
@@ -107,4 +195,8 @@ async function toggleAttendance(req, res) {
     }
 }
 
-module.exports = { getAttendanceDashboard, toggleAttendance }
+module.exports = { 
+    getAttendanceDashboard, 
+    toggleAttendance, 
+    submitAttendance
+}

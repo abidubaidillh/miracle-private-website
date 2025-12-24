@@ -45,7 +45,7 @@ export default function Sidebar() {
     const mentorMenus = [
         { label: 'Profil Saya', href: '/mentor/me', icon: User },
         { label: 'Jadwal Saya', href: '/jadwal', icon: Calendar },
-        { label: 'Absensi Siswa', href: '/absensi', icon: CheckSquare },
+        { label: 'Absensi Saya', href: '/absensi', icon: CheckSquare },
         { label: 'Riwayat Gaji', href: '/gaji-mentor', icon: ClipboardList },
     ]
 

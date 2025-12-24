@@ -12,9 +12,9 @@ const cookieParser = require('cookie-parser')
 // ==========================================================
 console.log('--- SUPABASE BACKEND CONFIG DEBUG ---')
 console.log('1. URL Loaded:', !!process.env.SUPABASE_URL)
-console.log('2. KEY Loaded:', !!process.env.SUPABASE_KEY)
-if (process.env.SUPABASE_KEY) {
-    console.log('3. KEY Prefix:', process.env.SUPABASE_KEY.substring(0, 10))
+console.log('2. KEY Loaded:', !!process.env.SUPABASE_SERVICE_ROLE_KEY)
+if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    console.log('3. KEY Prefix:', process.env.SUPABASE_SERVICE_ROLE_KEY.substring(0, 10))
 }
 console.log('-----------------------------------')
 
@@ -28,10 +28,11 @@ const mentorRoutes = require('./routes/mentor.routes')
 const paketRoutes = require('./routes/paket.routes')
 const jadwalRoutes = require('./routes/jadwal.routes') 
 const paymentRoutes = require('./routes/payment.routes')
-const absensiRoutes = require('./routes/absensi.routes')
+const attendanceRoutes = require('./routes/attendance.routes')
 const transactionRoutes = require('./routes/transaction.routes') 
 const financeRoutes = require('./routes/finance.routes') // ✅ Penting untuk Dashboard Keuangan
 const salaryRoutes = require('./routes/salary.routes')   // ✅ Penting untuk Gaji Mentor
+const operasionalRoutes = require('./routes/operasional.routes') // ✅ Biaya Operasional
 
 // ==========================================================
 // 2. Middleware Utama
@@ -88,10 +89,11 @@ mount('/api/mentors', mentorRoutes, 'Mentor Routes')
 mount('/api/packages', paketRoutes, 'Paket Routes')
 mount('/api/schedules', jadwalRoutes, 'Jadwal Routes')
 mount('/api/payments', paymentRoutes, 'Payment Routes')
-mount('/api/attendance', absensiRoutes, 'Absensi Routes')
+mount('/api/attendance', attendanceRoutes, 'Attendance Routes')
 mount('/api/transactions', transactionRoutes, 'Transaction Routes')
 mount('/api/finance', financeRoutes, 'Finance Routes') // Endpoint: /api/finance/summary
 mount('/api/salaries', salaryRoutes, 'Salary Routes')
+mount('/api/operasional', operasionalRoutes, 'Operasional Routes') // Endpoint: /api/operasional
 
 console.log('-----------------------')
 
