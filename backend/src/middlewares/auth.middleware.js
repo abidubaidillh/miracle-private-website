@@ -1,15 +1,18 @@
 // backend/src/middlewares/auth.middleware.js
 const supabase = require('../config/supabase')
 
-// Helper: Parsing raw cookie string manual
+// Helper: Parsing raw cookie string manual - Standardized with frontend
 function parseAuthCookie(cookieHeader) {
   if (!cookieHeader) return null
-  const parts = cookieHeader.split(';').map(s => s.trim())
+  // Standardize with frontend: split by '; ' (semicolon + space)
+  const parts = cookieHeader.split('; ').map(s => s.trim())
   for (const p of parts) {
     if (p.startsWith('auth=')) {
       try {
-        return JSON.parse(decodeURIComponent(p.substring(5)))
+        const value = p.substring(5) // Remove 'auth='
+        return JSON.parse(decodeURIComponent(value))
       } catch (e) {
+        console.error("Failed to parse auth cookie:", e)
         return null
       }
     }

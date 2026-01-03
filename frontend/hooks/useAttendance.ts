@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useUser } from '@/context/UserContext'
 import { useLoading } from '@/context/LoadingContext'
 import { AttendanceService } from '@/lib/attendanceService'
@@ -6,8 +6,10 @@ import { AttendanceService } from '@/lib/attendanceService'
 export interface UseAttendanceReturn {
   // Data
   schedules: any[]
+  filteredSchedules: any[]
   month: number
   year: number
+  filterProgress: string
   
   // Loading states
   isUploading: boolean
@@ -18,8 +20,7 @@ export interface UseAttendanceReturn {
   selectedSession: number
   
   // Actions
-  setMonth: (month: number) => void
-  setYear: (year: number) => void
+  setFilterProgress: (filter: string) => void
   handleAttendanceSubmit: (schedule: any, sessionNumber: number) => void
   handlePhotoSubmit: (file: File) => Promise<void>
   closePhotoModal: () => void
@@ -30,9 +31,12 @@ export function useAttendance(): UseAttendanceReturn {
   const { user } = useUser()
   const { withLoading } = useLoading()
   
-  // Filter states
-  const [month, setMonth] = useState(new Date().getMonth() + 1)
-  const [year, setYear] = useState(new Date().getFullYear())
+  // Fixed month and year (current month/year)
+  const month = new Date().getMonth() + 1
+  const year = new Date().getFullYear()
+  
+  // Progress filter state
+  const [filterProgress, setFilterProgress] = useState<string>('all')
   
   // Data state
   const [schedules, setSchedules] = useState<any[]>([])
@@ -59,12 +63,35 @@ export function useAttendance(): UseAttendanceReturn {
     })
   }
 
-  // Load data when user or filters change
+  // Load data when user changes
   useEffect(() => {
     if (user) {
       fetchData()
     }
-  }, [user, month, year])
+  }, [user])
+
+  // Filter schedules based on progress
+  const filteredSchedules = useMemo(() => {
+    if (!schedules || schedules.length === 0) return []
+    
+    switch (filterProgress) {
+      case 'in-progress':
+        return schedules.filter(schedule => {
+          const totalDone = schedule.sessions_status?.filter((s: any) => s.is_done).length || 0
+          const totalSessions = schedule.planned_sessions || schedule.sessions_status?.length || 0
+          return totalDone < totalSessions
+        })
+      case 'completed':
+        return schedules.filter(schedule => {
+          const totalDone = schedule.sessions_status?.filter((s: any) => s.is_done).length || 0
+          const totalSessions = schedule.planned_sessions || schedule.sessions_status?.length || 0
+          return totalDone >= totalSessions
+        })
+      case 'all':
+      default:
+        return schedules
+    }
+  }, [schedules, filterProgress])
 
   // Handle attendance submission
   const handleAttendanceSubmit = async (schedule: any, sessionNumber: number) => {
@@ -133,8 +160,10 @@ export function useAttendance(): UseAttendanceReturn {
   return {
     // Data
     schedules,
+    filteredSchedules,
     month,
     year,
+    filterProgress,
     
     // Loading states
     isUploading,
@@ -145,8 +174,7 @@ export function useAttendance(): UseAttendanceReturn {
     selectedSession,
     
     // Actions
-    setMonth,
-    setYear,
+    setFilterProgress,
     handleAttendanceSubmit,
     handlePhotoSubmit,
     closePhotoModal,

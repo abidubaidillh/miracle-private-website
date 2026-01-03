@@ -5,6 +5,26 @@ async function getTransactions(req, res) {
     try {
         const { type, startDate, endDate } = req.query
 
+        // Validasi query parameters
+        if (type && !['EXPENSE', 'INCOME'].includes(type)) {
+            return res.status(400).json({ error: 'Invalid transaction type. Must be EXPENSE or INCOME' })
+        }
+
+        if ((startDate && !endDate) || (!startDate && endDate)) {
+            return res.status(400).json({ error: 'Both startDate and endDate must be provided together' })
+        }
+
+        if (startDate && endDate) {
+            const start = new Date(startDate)
+            const end = new Date(endDate)
+            if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+                return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD' })
+            }
+            if (start > end) {
+                return res.status(400).json({ error: 'startDate cannot be after endDate' })
+            }
+        }
+
         let query = supabase
             .from('transactions')
             .select(`
@@ -18,7 +38,10 @@ async function getTransactions(req, res) {
 
         const { data, error } = await query
 
-        if (error) throw error
+        if (error) {
+            console.error('Database error in getTransactions:', error)
+            return res.status(500).json({ error: 'Failed to retrieve transactions' })
+        }
 
         // Hitung Total
         const totalAmount = data.reduce((sum, item) => sum + item.amount, 0)
@@ -29,7 +52,8 @@ async function getTransactions(req, res) {
         })
 
     } catch (err) {
-        return res.status(500).json({ error: err.message })
+        console.error('Unexpected error in getTransactions:', err)
+        return res.status(500).json({ error: 'Internal server error' })
     }
 }
 

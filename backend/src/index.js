@@ -8,15 +8,15 @@ const app = express()
 const cookieParser = require('cookie-parser')
 
 // ==========================================================
-// 0. Debug Environment (Cek Koneksi Supabase)
+// 0. Debug Environment (Cek Koneksi Supabase) - REMOVED SENSITIVE LOGGING
 // ==========================================================
-console.log('--- SUPABASE BACKEND CONFIG DEBUG ---')
-console.log('1. URL Loaded:', !!process.env.SUPABASE_URL)
-console.log('2. KEY Loaded:', !!process.env.SUPABASE_SERVICE_ROLE_KEY)
-if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    console.log('3. KEY Prefix:', process.env.SUPABASE_SERVICE_ROLE_KEY.substring(0, 10))
+if (process.env.NODE_ENV !== 'production') {
+    console.log('--- SUPABASE BACKEND CONFIG DEBUG ---')
+    console.log('1. URL Loaded:', !!process.env.SUPABASE_URL)
+    console.log('2. KEY Loaded:', !!process.env.SUPABASE_SERVICE_ROLE_KEY)
+    // Tidak menampilkan prefix key untuk keamanan
+    console.log('-----------------------------------')
 }
-console.log('-----------------------------------')
 
 // ==========================================================
 // 1. Import Routes

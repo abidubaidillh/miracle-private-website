@@ -92,18 +92,24 @@ export default function JadwalPage() {
                             <th className="px-6 py-4 text-sm font-bold">Murid</th>
                             <th className="px-6 py-4 text-sm font-bold">Mentor</th>
                             <th className="px-6 py-4 text-sm font-bold">Mapel</th>
+                            <th className="px-6 py-4 text-sm font-bold">Progress Sesi</th>
                             {canEdit && <th className="px-6 py-4 text-sm font-bold text-center">Aksi</th>}
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                         {schedules.length === 0 ? (
                             <tr>
-                                <td colSpan={canEdit ? 5 : 4} className="p-12 text-center text-gray-400">
+                                <td colSpan={canEdit ? 6 : 5} className="p-12 text-center text-gray-400">
                                     Belum ada jadwal sesi yang terdaftar.
                                 </td>
                             </tr>
                         ) : (
-                            schedules.map((s) => (
+                            schedules.map((s: any) => {
+                                const totalSessions = s.total_sessions || 0;
+                                const totalDone = s.total_done || 0;
+                                const progressPercentage = totalSessions > 0 ? Math.round((totalDone / totalSessions) * 100) : 0;
+                                
+                                return (
                                 <tr key={s.id} className="hover:bg-gray-50 transition-colors">
                                     <td className="px-6 py-4">
                                         <div className="font-bold text-gray-800">{formatDate(s.date)}</div>
@@ -125,6 +131,22 @@ export default function JadwalPage() {
                                             {s.subject || 'Umum'}
                                         </span>
                                     </td>
+                                    <td className="px-6 py-4">
+                                        <div className="flex flex-col gap-1">
+                                            <div className="text-sm font-medium text-gray-700">
+                                                {totalDone}/{totalSessions} sesi
+                                            </div>
+                                            <div className="w-full bg-gray-200 rounded-full h-2">
+                                                <div 
+                                                    className="bg-green-500 h-2 rounded-full transition-all duration-300"
+                                                    style={{ width: `${progressPercentage}%` }}
+                                                ></div>
+                                            </div>
+                                            <div className="text-xs text-gray-500">
+                                                {progressPercentage}% selesai
+                                            </div>
+                                        </div>
+                                    </td>
                                     {canEdit && (
                                         <td className="px-6 py-4 text-center">
                                             <button 
@@ -137,7 +159,8 @@ export default function JadwalPage() {
                                         </td>
                                     )}
                                 </tr>
-                            ))
+                                );
+                            })
                         )}
                     </tbody>
                 </table>

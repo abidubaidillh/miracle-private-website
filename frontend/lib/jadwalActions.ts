@@ -53,12 +53,32 @@ export async function deleteSchedule(id: string) {
 export async function createSchedule(data: any) {
     const res = await fetchWithAuth(API_BASE_URL, {
         method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
         body: JSON.stringify(data),
     });
     
     if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message || 'Gagal buat jadwal');
+        let errorMessage = 'Gagal buat jadwal';
+        try {
+            const err = await res.json();
+            console.error('Backend error response:', err);
+            // Coba parse error dari validasi Joi
+            if (err.errors && Array.isArray(err.errors)) {
+                errorMessage = err.errors.map((e: any) => {
+                    const key = Object.keys(e)[0];
+                    return `${key}: ${e[key]}`;
+                }).join(', ');
+            } else if (err.message) {
+                errorMessage = err.message;
+            } else if (err.error) {
+                errorMessage = err.error;
+            }
+        } catch (e) {
+            console.error('Failed to parse error response:', e);
+        }
+        throw new Error(errorMessage);
     }
     return res.json();
 }

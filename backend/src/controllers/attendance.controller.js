@@ -129,6 +129,31 @@ async function submitAttendance(req, res) {
         }
 
         // Simpan absensi dengan bukti_foto URL
+        // Dapatkan tanggal jadwal dari schedule untuk sinkronisasi
+        const { data: scheduleData, error: scheduleError } = await supabase
+            .from('schedules')
+            .select('date')
+            .eq('id', schedule_id)
+            .single()
+        
+        if (scheduleError) {
+            console.error('Error fetching schedule date:', scheduleError)
+            return res.status(400).json({ error: 'Jadwal tidak ditemukan' })
+        }
+
+        const scheduleDate = scheduleData.date
+        const attendanceDate = new Date()
+        
+        // Validasi: apakah tanggal absensi sesuai dengan tanggal jadwal?
+        // Konversi ke tanggal saja (tanpa waktu) untuk perbandingan
+        const scheduleDateOnly = new Date(scheduleDate).toISOString().split('T')[0]
+        const attendanceDateOnly = attendanceDate.toISOString().split('T')[0]
+        
+        if (scheduleDateOnly !== attendanceDateOnly) {
+            console.warn(`⚠️ Absensi tanggal ${attendanceDateOnly} untuk jadwal tanggal ${scheduleDateOnly}`)
+            // Tidak menghentikan proses, hanya warning log
+        }
+
         const { data, error } = await supabase
             .from('attendance')
             .insert([{
@@ -139,7 +164,8 @@ async function submitAttendance(req, res) {
                 year: yearNum,
                 status,
                 bukti_foto, // URL dari Supabase Storage
-                date: new Date()
+                date: scheduleDate, // Gunakan tanggal jadwal, bukan tanggal absensi
+                recorded_at: new Date() // Waktu saat absensi direkam
             }])
             .select()
 
@@ -178,6 +204,18 @@ async function toggleAttendance(req, res) {
             return res.json({ status: 'REMOVED', message: 'Absensi dibatalkan' })
         } else {
             // Simpan (Hadir) - tanpa bukti foto untuk backward compatibility
+            // Dapatkan tanggal jadwal untuk sinkronisasi
+            const { data: scheduleData, error: scheduleError } = await supabase
+                .from('schedules')
+                .select('date')
+                .eq('id', schedule_id)
+                .single()
+            
+            let scheduleDate = new Date()
+            if (!scheduleError && scheduleData) {
+                scheduleDate = scheduleData.date
+            }
+
             await supabase.from('attendance').insert([{
                 schedule_id,
                 mentor_id,
@@ -185,7 +223,8 @@ async function toggleAttendance(req, res) {
                 month,
                 year,
                 status: status || 'HADIR',
-                date: new Date()
+                date: scheduleDate, // Gunakan tanggal jadwal
+                recorded_at: new Date() // Waktu rekaman
             }])
             return res.json({ status: 'ADDED', message: 'Absensi tersimpan' })
         }

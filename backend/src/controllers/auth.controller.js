@@ -44,7 +44,7 @@ async function register(req, res) {
 
         // 2. Simpan ke Tabel 'users' (Profile Login)
         try {
-            await supabase.from('users').upsert({
+            const { error: userError } = await supabase.from('users').upsert({
                 id: user.id,
                 email: user.email || email,
                 username,
@@ -53,17 +53,29 @@ async function register(req, res) {
                 role: normalizedRole,
             })
             
-            // 3. Jika Role MENTOR, simpan juga ke tabel 'mentors'
+            if (userError) {
+                console.error("Error saving user to users table:", userError)
+                throw new Error('Gagal menyimpan profil user: ' + userError.message)
+            }
+            
+            // 3. HANYA jika Role MENTOR, simpan juga ke tabel 'mentors'
             // Karena register sendiri, Subject default 'Umum' & Gaji 0 (menunggu di-set Admin)
-            await supabase.from('mentors').insert([{
-                id: user.id,
-                name: username,
-                email: email,
-                phone_number: phone_number,
-                subject: 'Umum', 
-                salary_per_session: 0, 
-                status: 'AKTIF'
-            }])
+            if (normalizedRole === 'MENTOR') {
+                const { error: mentorError } = await supabase.from('mentors').insert([{
+                    id: user.id,
+                    name: username,
+                    email: email,
+                    phone_number: phone_number,
+                    subject: 'Umum', 
+                    salary_per_session: 0, 
+                    status: 'AKTIF'
+                }])
+
+                if (mentorError) {
+                    console.error("Error saving mentor to mentors table:", mentorError)
+                    throw new Error('Gagal menyimpan data mentor: ' + mentorError.message)
+                }
+            }
 
             // Cache role (Opsional)
             if (userStore && userStore.saveRole) {
@@ -72,8 +84,8 @@ async function register(req, res) {
 
         } catch (e) {
             console.error("Error saving user profile details:", e)
-            // Kita tidak return error disini agar user tetap terbuat auth-nya, 
-            // nanti admin bisa perbaiki data profilnya
+            // Return error karena profil user tidak lengkap
+            return res.status(500).json({ error: e.message })
         }
 
         return res.status(201).json({ 

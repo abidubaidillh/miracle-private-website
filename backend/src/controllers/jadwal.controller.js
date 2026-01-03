@@ -45,10 +45,35 @@ const getAllJadwal = async (req, res) => {
         if (date) query = query.eq('date', date);
         if (student_id) query = query.eq('student_id', student_id);
 
-        const { data, error } = await query;
+        const { data: schedules, error } = await query;
 
         if (error) throw error;
-        res.status(200).json({ schedules: data });
+
+        // --- Hitung total sesi yang sudah dilakukan dari tabel attendance ---
+        const schedulesWithAttendance = await Promise.all(schedules.map(async (schedule) => {
+            // Hitung jumlah attendance untuk schedule ini
+            const { count: totalDone, error: countError } = await supabase
+                .from('attendance')
+                .select('*', { count: 'exact', head: true })
+                .eq('schedule_id', schedule.id);
+
+            if (countError) {
+                console.error(`Error counting attendance for schedule ${schedule.id}:`, countError);
+                return {
+                    ...schedule,
+                    total_sessions: schedule.planned_sessions || 0,
+                    total_done: 0
+                };
+            }
+
+            return {
+                ...schedule,
+                total_sessions: schedule.planned_sessions || 0,
+                total_done: totalDone || 0
+            };
+        }));
+
+        res.status(200).json({ schedules: schedulesWithAttendance });
 
     } catch (err) {
         console.error("[JadwalController] Error:", err.message);
@@ -58,7 +83,7 @@ const getAllJadwal = async (req, res) => {
 
 // --- B. POST (Create) ---
 const createJadwal = async (req, res) => {
-    const { student_id, mentor_id, date, start_time, end_time, subject } = req.body;
+    const { student_id, mentor_id, date, start_time, end_time, subject, planned_sessions } = req.body;
 
     // Validasi: 'date' wajib diisi
     if (!student_id || !mentor_id || !date || !start_time || !end_time) {
@@ -66,6 +91,40 @@ const createJadwal = async (req, res) => {
     }
 
     try {
+        // Validasi: Cek konflik jadwal untuk mentor di tanggal dan waktu yang sama
+        const { data: existingSchedules, error: conflictError } = await supabase
+            .from('schedules')
+            .select('id, mentor_id, date, start_time, end_time')
+            .eq('mentor_id', mentor_id)
+            .eq('date', date)
+            .or(`start_time.lte.${end_time},end_time.gte.${start_time}`)
+            .limit(1);
+
+        if (conflictError) throw conflictError;
+
+        if (existingSchedules && existingSchedules.length > 0) {
+            return res.status(409).json({ 
+                message: "Mentor sudah memiliki jadwal di waktu yang sama pada tanggal tersebut." 
+            });
+        }
+
+        // Validasi: Cek konflik jadwal untuk siswa di tanggal dan waktu yang sama
+        const { data: studentSchedules, error: studentConflictError } = await supabase
+            .from('schedules')
+            .select('id, student_id, date, start_time, end_time')
+            .eq('student_id', student_id)
+            .eq('date', date)
+            .or(`start_time.lte.${end_time},end_time.gte.${start_time}`)
+            .limit(1);
+
+        if (studentConflictError) throw studentConflictError;
+
+        if (studentSchedules && studentSchedules.length > 0) {
+            return res.status(409).json({ 
+                message: "Siswa sudah memiliki jadwal di waktu yang sama pada tanggal tersebut." 
+            });
+        }
+
         const { data, error } = await supabase
             .from('schedules')
             .insert([{
@@ -74,7 +133,8 @@ const createJadwal = async (req, res) => {
                 date: date, // Simpan tanggal spesifik
                 start_time,
                 end_time,
-                subject: subject || '-'
+                subject: subject || '-',
+                planned_sessions: planned_sessions || 4
             }])
             .select()
             .single();

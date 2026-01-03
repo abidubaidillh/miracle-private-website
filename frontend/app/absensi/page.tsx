@@ -12,9 +12,10 @@ export default function AbsensiPage() {
     const { user } = useUser()
     const {
         // Data
-        schedules,
+        filteredSchedules,
         month,
         year,
+        filterProgress,
         
         // Loading states
         isUploading,
@@ -23,8 +24,7 @@ export default function AbsensiPage() {
         showPhotoModal,
         
         // Actions
-        setMonth,
-        setYear,
+        setFilterProgress,
         handleAttendanceSubmit,
         handlePhotoSubmit,
         closePhotoModal
@@ -35,16 +35,16 @@ export default function AbsensiPage() {
     return (
         <DashboardLayout title="Absensi Kelas">
             <AttendanceFilters
-                month={month}
-                year={year}
-                onMonthChange={setMonth}
-                onYearChange={setYear}
+                filterProgress={filterProgress}
+                onFilterProgressChange={setFilterProgress}
                 userRole={user.role}
                 userName={user.name}
+                month={month}
+                year={year}
             />
 
             <AttendanceTable 
-                schedules={schedules}
+                schedules={filteredSchedules}
                 onAttendanceSubmit={handleAttendanceSubmit}
                 userRole={user.role}
                 isLoading={false}

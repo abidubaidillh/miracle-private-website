@@ -42,7 +42,26 @@ async function getSalaries(req, res) {
             if (countErr) console.error("Error counting attendance:", countErr)
 
             const realSessionCount = actualSessions || 0
-            const targetSessions = 4 
+            
+            // Hitung target_sessions dari planned_sessions di tabel schedules untuk bulan dan tahun tersebut
+            let targetSessions = 4 // default fallback
+            try {
+                // Ambil total planned_sessions dari jadwal untuk mentor ini pada bulan dan tahun tersebut
+                const { data: schedules, error: schedErr } = await supabase
+                    .from('schedules')
+                    .select('planned_sessions')
+                    .eq('mentor_id', m.id)
+                    .eq('month', currentMonth)
+                    .eq('year', currentYear)
+                
+                if (!schedErr && schedules && schedules.length > 0) {
+                    // Sum semua planned_sessions (jika ada multiple jadwal dalam bulan yang sama)
+                    targetSessions = schedules.reduce((sum, s) => sum + (s.planned_sessions || 0), 0)
+                }
+            } catch (e) {
+                console.error("Error fetching planned sessions:", e)
+                // tetap menggunakan default
+            }
 
             const salaryRecord = existingSalaries.find(s => s.mentor_id === m.id)
 

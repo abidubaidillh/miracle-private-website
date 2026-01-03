@@ -68,7 +68,7 @@ export function middleware(req: NextRequest) {
         if (
             pathname.startsWith('/jadwal') || 
             pathname.startsWith('/kelola-user') ||
-            pathname.startsWith('/mentor/edit') // Tidak boleh edit mentor
+            pathname.startsWith('/mentor') // Tidak boleh akses data mentor (termasuk /mentor, /mentor/me, /mentor/edit)
         ) {
              return NextResponse.redirect(new URL('/keuangan', req.url))
         }
