@@ -346,12 +346,12 @@ async function recalculateSalary(req, res) {
                               (salaryData.deduction || 0)
 
         // 4. Update data di tabel salaries
+        // Hanya update total_sessions karena total_amount adalah generated column
         const { error: errUpdate } = await supabase
             .from('salaries')
             .update({ 
-                total_sessions: realSessionCount,
-                total_amount: newTotalAmount,
-                updated_at: new Date()
+                total_sessions: realSessionCount
+                // total_amount tidak diupdate karena kolom generated/dengan constraint DEFAULT
             })
             .eq('id', id)
 
@@ -362,7 +362,7 @@ async function recalculateSalary(req, res) {
             old_sessions: salaryData.total_sessions,
             new_sessions: realSessionCount,
             old_amount: salaryData.total_amount,
-            new_amount: newTotalAmount
+            new_amount: newTotalAmount // Nilai yang dihitung ulang untuk response
         })
 
     } catch (err) {

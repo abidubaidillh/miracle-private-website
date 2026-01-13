@@ -112,15 +112,20 @@ async function submitAttendance(req, res) {
             })
         }
 
-        // Cek duplicate
-        const { data: existing } = await supabase
+        // Cek duplicate - gunakan maybeSingle untuk menghindari error jika tidak ada data
+        const { data: existing, error: existingError } = await supabase
             .from('attendance')
             .select('id')
             .eq('schedule_id', schedule_id)
             .eq('session_number', sessionNum)
             .eq('month', monthNum)
             .eq('year', yearNum)
-            .single()
+            .maybeSingle()
+
+        if (existingError) {
+            console.error('Error checking duplicate attendance:', existingError)
+            return res.status(500).json({ error: 'Gagal memeriksa data absensi' })
+        }
 
         if (existing) {
             return res.status(400).json({ 
@@ -134,10 +139,14 @@ async function submitAttendance(req, res) {
             .from('schedules')
             .select('date')
             .eq('id', schedule_id)
-            .single()
+            .maybeSingle()
         
         if (scheduleError) {
             console.error('Error fetching schedule date:', scheduleError)
+            return res.status(500).json({ error: 'Gagal mengambil data jadwal' })
+        }
+
+        if (!scheduleData) {
             return res.status(400).json({ error: 'Jadwal tidak ditemukan' })
         }
 
@@ -164,8 +173,8 @@ async function submitAttendance(req, res) {
                 year: yearNum,
                 status,
                 bukti_foto, // URL dari Supabase Storage
-                date: scheduleDate, // Gunakan tanggal jadwal, bukan tanggal absensi
-                recorded_at: new Date() // Waktu saat absensi direkam
+                date: scheduleDate // Gunakan tanggal jadwal, bukan tanggal absensi
+                // recorded_at dihapus karena kolom tidak ada di database
             }])
             .select()
 
@@ -223,8 +232,8 @@ async function toggleAttendance(req, res) {
                 month,
                 year,
                 status: status || 'HADIR',
-                date: scheduleDate, // Gunakan tanggal jadwal
-                recorded_at: new Date() // Waktu rekaman
+                date: scheduleDate // Gunakan tanggal jadwal
+                // recorded_at dihapus karena kolom tidak ada di database
             }])
             return res.json({ status: 'ADDED', message: 'Absensi tersimpan' })
         }
