@@ -143,7 +143,7 @@ export default function Page() {
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Password"
               leftIcon={<LockIcon />}
-              rightIcon={<button type="button" onClick={() => setShowPassword(!showPassword)} aria-label="toggle password visibility"><EyeIcon /></button>}
+              rightIcon={<button type="button" onClick={() => setShowPassword(!showPassword)} ariaLabel="toggle password visibility"><EyeIcon /></button>}
             />
           </div>
 

@@ -26,31 +26,34 @@ export default function AttendanceFilters({
   ]
 
   return (
-    <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-6 flex flex-wrap items-center justify-between gap-4">
-      <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2 text-gray-700 font-bold bg-gray-50 px-3 py-1.5 rounded-lg border">
-          <Calendar size={18} className="text-[#0077AF]" />
-          <span>{monthNames[month - 1]} {year}</span>
+    <div className="bg-miracle-surface p-6 rounded-2xl shadow-medium border border-gray-100 mb-8 flex flex-wrap items-center justify-between gap-6 animate-fade-in">
+      <div className="flex items-center gap-6">
+        <div className="flex items-center gap-3 text-miracle-text font-semibold bg-miracle-background px-4 py-2.5 rounded-xl border border-gray-100">
+          <Calendar size={20} className="text-miracle-blue" />
+          <span className="text-sm tracking-wide">Periode: {monthNames[month - 1]} {year}</span>
         </div>
         
-        <div className="flex items-center gap-2">
-          <Filter size={16} className="text-gray-500" />
-          <select 
-            value={filterProgress} 
-            onChange={(e) => onFilterProgressChange(e.target.value)} 
-            className="bg-white border rounded p-2 outline-none focus:ring-2 focus:ring-[#0077AF] transition-all duration-200"
-          >
-            <option value="all">Semua Progress</option>
-            <option value="in-progress">In-Progress</option>
-            <option value="completed">Completed</option>
-          </select>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 bg-miracle-background px-3 py-2 rounded-xl border border-gray-100">
+            <Filter size={18} className="text-miracle-blue" />
+            <select 
+              value={filterProgress} 
+              onChange={(e) => onFilterProgressChange(e.target.value)} 
+              className="bg-transparent border-none outline-none text-sm font-medium text-miracle-text focus:ring-0 cursor-pointer"
+            >
+              <option value="all">Semua Progress</option>
+              <option value="in-progress">In-Progress</option>
+              <option value="completed">Completed</option>
+            </select>
+          </div>
         </div>
       </div>
       
       {/* Badge Info Role */}
       {userRole === 'MENTOR' && userName && (
-        <div className="bg-blue-50 text-[#0077AF] px-3 py-1 rounded text-xs font-bold border border-blue-100 flex items-center gap-2">
-          <User size={14}/> Mode Mentor: {userName}
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 text-miracle-blue px-4 py-2 rounded-xl text-sm font-semibold border border-blue-100 flex items-center gap-2 shadow-soft">
+          <User size={16} className="text-miracle-blue"/> 
+          <span>Mode Mentor: <span className="font-bold">{userName}</span></span>
         </div>
       )}
     </div>

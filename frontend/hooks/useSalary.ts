@@ -157,7 +157,49 @@ export function useSalary(): UseSalaryReturn {
     setIsUploading(true)
 
     try {
-      await SalaryService.processSalaryPayment(id, proofFile)
+      // If the ID looks like a mentor ID (no salary record exists yet), 
+      // we need to save the salary as a draft first
+      let salaryId = id
+      
+      // Check if this is likely a mentor ID (by checking if we have selectedSalary with null id)
+      if (selectedSalary && !selectedSalary.id) {
+        // This is a virtual salary record, need to save it as draft first
+        try {
+          await SalaryService.updateBonus(
+            selectedSalary.mentor_id,
+            month,
+            year,
+            selectedSalary.total_sessions,
+            selectedSalary.salary_per_session,
+            selectedSalary.bonus || 0,
+            0 // deduction
+          )
+          
+          // Refresh data to get the new salary ID
+          await fetchData()
+          
+          // Find the newly created salary record
+          const updatedSalaries = await SalaryService.fetchSalaries(month, year)
+          const newSalary = updatedSalaries.salaries.find(
+            (s: SalaryData) => 
+              s.mentor_id === selectedSalary.mentor_id && 
+              s.month === month && 
+              s.year === year
+          )
+          
+          if (newSalary && newSalary.id) {
+            salaryId = newSalary.id
+          } else {
+            throw new Error("Gagal membuat draft gaji. Silakan coba lagi.")
+          }
+        } catch (draftError: any) {
+          console.error("Failed to save salary draft:", draftError)
+          throw new Error("Gagal menyimpan draft gaji: " + draftError.message)
+        }
+      }
+
+      // Now process payment with the valid salary ID
+      await SalaryService.processSalaryPayment(salaryId, proofFile)
       
       // Close modal and refresh data
       setPayModalOpen(false)

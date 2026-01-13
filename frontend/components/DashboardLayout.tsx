@@ -22,34 +22,31 @@ export default function DashboardLayout({ children, title }: DashboardLayoutProp
     };
 
     return (
-        <div className="flex min-h-screen bg-[#F8FAFC]"> 
+        <div className="flex min-h-screen bg-miracle-background"> 
             <Sidebar />
             
             <main className="flex-1 ml-64 flex flex-col min-h-screen">
-                {/* ✅ TINGGI h-20: Sejajar dengan area logo di sidebar */}
-                <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-gray-200 h-20 flex items-center justify-between px-10">
+                {/* Header dengan konsistensi style baru */}
+                <header className="sticky top-0 z-50 bg-miracle-surface/90 backdrop-blur-lg border-b border-gray-100 h-20 flex items-center justify-between px-10 shadow-soft animate-fade-in">
                     
                     {/* Bagian Judul */}
                     <div className="flex flex-col">
-                        <h1 
-                            className="text-[#0077AF] text-3xl font-serif leading-none italic"
-                            style={{ fontFamily: '"Times New Roman", Times, serif' }} 
-                        >
+                        <h1 className="text-miracle-blue text-3xl font-bold tracking-tight">
                             {title || 'Overview'}
                         </h1>
                         <div className="flex items-center gap-2 mt-1">
-                            <p className="text-[9px] text-gray-400 font-bold uppercase tracking-[2px]">
+                            <p className="text-[10px] text-miracle-text-secondary font-bold uppercase tracking-[2px]">
                                 Miracle Private Management
                             </p>
                         </div>
                     </div>
 
-                    {/* Bagian Profil & Notifikasi (Clean - Tanpa Search) */}
+                    {/* Bagian Profil & Notifikasi */}
                     <div className="flex items-center gap-6">
                         {/* Notification Bell */}
-                        <button className="relative p-2 text-gray-400 hover:text-[#0077AF] hover:bg-gray-50 rounded-full transition-all">
-                            <Bell size={20} />
-                            <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
+                        <button className="relative p-2.5 text-miracle-text-secondary hover:text-miracle-blue hover:bg-miracle-background rounded-xl transition-all duration-200 group">
+                            <Bell size={20} className="group-hover:scale-110 transition-transform" />
+                            <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-miracle-surface"></span>
                         </button>
                         
                         {/* Divider */}
@@ -62,14 +59,14 @@ export default function DashboardLayout({ children, title }: DashboardLayoutProp
                             ) : (
                                 <>
                                     <div className="flex flex-col text-right">
-                                        <span className="text-xs font-bold text-gray-700 leading-none">
+                                        <span className="text-sm font-semibold text-miracle-text leading-none">
                                             {user?.name || "Guest"}
                                         </span>
-                                        <span className="text-[10px] font-medium text-[#0077AF] mt-1">
+                                        <span className="text-xs font-medium text-miracle-blue mt-1">
                                             {user?.role || "Visitor"}
                                         </span>
                                     </div>
-                                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#0077AF] to-blue-400 flex items-center justify-center text-white font-bold text-sm shadow-sm">
+                                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-miracle-blue to-miracle-light flex items-center justify-center text-white font-bold text-sm shadow-medium">
                                         {getInitials(user?.name || "G")}
                                     </div>
                                 </>
