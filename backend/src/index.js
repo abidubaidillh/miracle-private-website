@@ -2,26 +2,24 @@
 
 const express = require('express')
 const cors = require('cors')
-require('dotenv').config() // Memuat .env di awal
+const cookieParser = require('cookie-parser')
+require('dotenv').config() 
 
 const app = express()
-const cookieParser = require('cookie-parser')
 
 // ==========================================================
-// 0. Debug Environment (Cek Koneksi Supabase) - REMOVED SENSITIVE LOGGING
+// 0. Debug Environment
 // ==========================================================
 if (process.env.NODE_ENV !== 'production') {
     console.log('--- SUPABASE BACKEND CONFIG DEBUG ---')
     console.log('1. URL Loaded:', !!process.env.SUPABASE_URL)
     console.log('2. KEY Loaded:', !!process.env.SUPABASE_SERVICE_ROLE_KEY)
-    // Tidak menampilkan prefix key untuk keamanan
     console.log('-----------------------------------')
 }
 
 // ==========================================================
 // 1. Import Routes
 // ==========================================================
-// Pastikan semua file ini ada di folder src/routes/
 const authRoutes = require('./routes/auth.routes')
 const muridRoutes = require('./routes/murid.routes')
 const mentorRoutes = require('./routes/mentor.routes') 
@@ -30,9 +28,9 @@ const jadwalRoutes = require('./routes/jadwal.routes')
 const paymentRoutes = require('./routes/payment.routes')
 const attendanceRoutes = require('./routes/attendance.routes')
 const transactionRoutes = require('./routes/transaction.routes') 
-const financeRoutes = require('./routes/finance.routes') // ✅ Penting untuk Dashboard Keuangan
-const salaryRoutes = require('./routes/salary.routes')   // ✅ Penting untuk Gaji Mentor
-const operasionalRoutes = require('./routes/operasional.routes') // ✅ Biaya Operasional
+const financeRoutes = require('./routes/finance.routes') 
+const salaryRoutes = require('./routes/salary.routes') 
+const operasionalRoutes = require('./routes/operasional.routes')
 
 // ==========================================================
 // 2. Middleware Utama
@@ -44,13 +42,11 @@ app.use(cors({
     ],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+    allowedHeaders: ['Content-Type', 'Authorization'] // WAJIB ada Authorization
 }));
 
-// WAJIB agar req.body terbaca sebagai JSON
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
-
 app.use(cookieParser())
 
 // ==========================================================
@@ -60,7 +56,6 @@ app.get('/api/health', (req, res) => {
     res.json({ 
         status: 'ok', 
         serverTime: new Date().toISOString(),
-        version: '1.0.0',
         message: 'Miracle Private Backend is Healthy 🚀'
     })
 })
@@ -70,15 +65,14 @@ app.get('/', (req, res) => {
 })
 
 // ==========================================================
-// 4. Mount Routes
+// 4. Mount Routes (Diseragamkan dengan /api)
 // ==========================================================
 
 console.log('--- MOUNTING ROUTES ---')
 
-// Helper function untuk mount route dengan aman
 const mount = (path, route, name) => {
     try {
-        if (!route) throw new Error(`Route module is undefined. Check your require('./routes/...') path.`)
+        if (!route) throw new Error(`Route module is undefined.`)
         app.use(path, route)
         console.log(`✅ ${name} mounted at ${path}`)
     } catch (e) {
@@ -86,37 +80,35 @@ const mount = (path, route, name) => {
     }
 }
 
+// Semua route sekarang menggunakan prefix /api agar sinkron dengan frontend
 mount('/api/auth', authRoutes, 'Auth Routes')
 mount('/api/students', muridRoutes, 'Murid Routes')
 mount('/api/mentors', mentorRoutes, 'Mentor Routes')
 mount('/api/packages', paketRoutes, 'Paket Routes')
 mount('/api/schedules', jadwalRoutes, 'Jadwal Routes')
-mount('/api/payments', paymentRoutes, 'Payment Routes')
+mount('/api/payments', paymentRoutes, 'Payment Routes') // Sebelumnya /payments
 mount('/api/attendance', attendanceRoutes, 'Attendance Routes')
 mount('/api/transactions', transactionRoutes, 'Transaction Routes')
-mount('/api/finance', financeRoutes, 'Finance Routes') // Endpoint: /api/finance/summary
+mount('/api/finance', financeRoutes, 'Finance Routes') // Sebelumnya /finance
 mount('/api/salaries', salaryRoutes, 'Salary Routes')
-mount('/api/operasional', operasionalRoutes, 'Operasional Routes') // Endpoint: /api/operasional
+mount('/api/operasional', operasionalRoutes, 'Operasional Routes')
 
 console.log('-----------------------')
 
 // ==========================================================
-// 5. Error Handling Middleware (JANGAN DIPINDAH)
+// 5. Error Handling
 // ==========================================================
 
-// 404 Handler (Endpoint tidak ditemukan)
 app.use((req, res, next) => {
     const error = new Error(`Not Found - ${req.originalUrl}`)
     res.status(404)
     next(error)
 })
 
-// Global Error Handler
 app.use((error, req, res, next) => {
     const statusCode = res.statusCode === 200 ? 500 : res.statusCode
     console.error(`🔥 ERROR: ${error.message}`)
     
-    // Jangan tampilkan stack trace di production untuk keamanan
     res.status(statusCode).json({
         error: error.message, 
         stack: process.env.NODE_ENV === 'production' ? '🥞' : error.stack,

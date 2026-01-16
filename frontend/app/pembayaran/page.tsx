@@ -97,6 +97,10 @@ const PayModal = ({ isOpen, onClose, onConfirm, paymentData, isUploading }: any)
                     <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
                         <p className="font-bold text-gray-800 text-lg">{paymentData.title}</p>
                         <p className="text-sm text-gray-500 mt-1">Siswa: {paymentData.students?.name || '-'}</p>
+                        <p className="text-sm text-gray-500 mt-1">Siswa: {paymentData.students?.name || '-'}</p>
+                             {paymentData.students?.school_origin && (
+                         <p className="text-xs text-gray-400">Asal Sekolah: {paymentData.students.school_origin}</p>
+                            )}
                         <div className="mt-3 pt-3 border-t border-blue-200 flex justify-between items-center">
                             <span className="text-sm text-gray-600">Total Tagihan:</span>
                             <span className="font-mono font-black text-xl text-[#0077AF]">{formatRupiah(paymentData.amount)}</span>

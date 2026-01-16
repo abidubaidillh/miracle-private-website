@@ -5,11 +5,23 @@ const supabase = require('../config/supabase')
 const getPayments = async (req, res) => {
     const { search, status } = req.query
     try {
+        // Gunakan seleksi kolom eksplisit untuk menghindari Supabase memanggil kolom yang tidak ada (cache issue)
         let query = supabase
             .from('payments')
             .select(`
-                *,
-                students (name, phone_number) 
+                id,
+                student_id,
+                title,
+                amount,
+                status,
+                method,
+                notes,
+                payment_date,
+                proof_image,
+                students!inner (
+                    name, 
+                    school_origin
+                )
             `)
             .order('payment_date', { ascending: false })
 
@@ -18,17 +30,29 @@ const getPayments = async (req, res) => {
         }
 
         const { data, error } = await query
-        if (error) throw error
-
-        let filteredData = data
-        if (search) {
-            const lowerSearch = search.toLowerCase()
-            filteredData = data.filter(item => 
-                item.title.toLowerCase().includes(lowerSearch) ||
-                (item.students && item.students.name.toLowerCase().includes(lowerSearch))
-            )
+        
+        if (error) {
+            console.error("Supabase Query Error:", error);
+            throw error
         }
 
+        let filteredData = data
+        
+        // Logika Filter di sisi Server (Javascript) agar lebih fleksibel
+        if (search) {
+            const lowerSearch = search.toLowerCase()
+            filteredData = data.filter(item => {
+                const studentName = item.students?.name?.toLowerCase() || ''
+                const schoolOrigin = item.students?.school_origin?.toLowerCase() || ''
+                const title = item.title?.toLowerCase() || ''
+                
+                return title.includes(lowerSearch) || 
+                       studentName.includes(lowerSearch) || 
+                       schoolOrigin.includes(lowerSearch)
+            })
+        }
+
+        // Hitung Statistik berdasarkan data yang sudah difilter
         const stats = {
             total_lunas: filteredData.filter(p => p.status === 'LUNAS').length,
             total_pending: filteredData.filter(p => p.status !== 'LUNAS').length,
@@ -37,6 +61,7 @@ const getPayments = async (req, res) => {
 
         return res.status(200).json({ payments: filteredData, stats })
     } catch (err) {
+        console.error("Controller Error:", err.message);
         return res.status(500).json({ message: err.message })
     }
 }
@@ -62,6 +87,7 @@ const createPayment = async (req, res) => {
 
         if (error) throw error
 
+        // Jika langsung lunas saat dibuat, catat ke transaksi
         if (status === 'LUNAS') {
             await recordTransaction(data.id, title, amount, payment_date, proof_image, method)
         }
@@ -72,10 +98,10 @@ const createPayment = async (req, res) => {
     }
 }
 
-// ✅ FIXED: Update Status & Simpan Metode Pembayaran dari Modal Pelunasan
+// UPDATE: Pelunasan Pembayaran
 const payPayment = async (req, res) => {
     const { id } = req.params
-    const { proof_image, method } = req.body // ✅ Mengambil method dari payload frontend
+    const { proof_image, method } = req.body 
 
     try {
         // 1. Cek data lama
@@ -88,12 +114,12 @@ const payPayment = async (req, res) => {
         if (fetchError || !oldPayment) return res.status(404).json({ error: 'Data pembayaran tidak ditemukan' })
         if (oldPayment.status === 'LUNAS') return res.status(400).json({ error: 'Pembayaran ini sudah lunas sebelumnya' })
 
-        // 2. Update Status jadi LUNAS & Simpan Metode + Bukti
+        // 2. Update Status jadi LUNAS
         const { data: updatedPayment, error: updateError } = await supabase
             .from('payments')
             .update({
                 status: 'LUNAS',
-                method: method, // ✅ Kolom method sekarang diupdate dari parameter modal
+                method: method,
                 proof_image: proof_image, 
                 payment_date: new Date() 
             })
@@ -103,7 +129,7 @@ const payPayment = async (req, res) => {
 
         if (updateError) throw updateError
 
-        // 3. [AUTO-JOURNAL] Catat ke Tabel Transactions dengan info metode
+        // 3. Catat ke Jurnal Transaksi
         await recordTransaction(id, oldPayment.title, oldPayment.amount, new Date(), proof_image, method)
 
         return res.json({ message: 'Pembayaran berhasil dilunasi', data: updatedPayment })
@@ -114,11 +140,14 @@ const payPayment = async (req, res) => {
     }
 }
 
+// DELETE: Hapus Pembayaran
 const deletePayment = async (req, res) => {
     const { id } = req.params
     try {
         const { error } = await supabase.from('payments').delete().eq('id', id)
+        // Hapus juga record di transaksi jika ada
         await supabase.from('transactions').delete().eq('reference_id', id)
+        
         if (error) throw error
         return res.status(200).json({ message: 'Data dihapus' })
     } catch (err) {
@@ -126,10 +155,11 @@ const deletePayment = async (req, res) => {
     }
 }
 
-// ✅ FIXED: Helper recordTransaction sekarang menerima parameter method
+// HELPER: Mencatat ke tabel Transactions
 async function recordTransaction(refId, title, amount, date, proofImage = null, method = null) {
     try {
         let categoryId = null
+        // Cari atau buat kategori "Pembayaran Les"
         const { data: catData } = await supabase
             .from('categories')
             .select('id')
@@ -152,7 +182,7 @@ async function recordTransaction(refId, title, amount, date, proofImage = null, 
             type: 'INCOME',
             amount: amount,
             category_id: categoryId,
-            description: `Pelunasan (${method || 'Tanpa Metode'}): ${title}`, // ✅ Keterangan metode ditambahkan di deskripsi
+            description: `Pelunasan (${method || 'Tanpa Metode'}): ${title}`,
             reference_id: refId,
             proof_image: proofImage
         }])

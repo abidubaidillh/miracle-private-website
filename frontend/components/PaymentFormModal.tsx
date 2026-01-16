@@ -1,7 +1,7 @@
 "use client"
 import React, { useState, useEffect } from 'react'
 import { X, Save, UploadCloud, CheckCircle, AlertCircle } from 'lucide-react'
-import { getStudents } from '@/lib/studentActions'
+import { getStudents, Student } from '@/lib/studentActions'
 
 interface Props {
     isOpen: boolean
@@ -10,8 +10,9 @@ interface Props {
 }
 
 export default function PaymentFormModal({ isOpen, onClose, onSubmit }: Props) {
-    const [students, setStudents] = useState<any[]>([])
-    const [proofFile, setProofFile] = useState<File | null>(null) // State untuk file
+    // Gunakan tipe Student yang sudah kita perbarui di studentActions.ts
+    const [students, setStudents] = useState<Student[]>([])
+    const [proofFile, setProofFile] = useState<File | null>(null)
     
     const [form, setForm] = useState({
         student_id: '',
@@ -26,27 +27,26 @@ export default function PaymentFormModal({ isOpen, onClose, onSubmit }: Props) {
     // Reset form saat modal dibuka
     useEffect(() => {
         if (isOpen) {
-            getStudents().then(res => setStudents(res.students || [])).catch(console.error)
-            setProofFile(null) // Reset file
-            setForm(prev => ({ ...prev, status: 'LUNAS', method: 'CASH' })) // Default reset
+            getStudents()
+                .then(res => setStudents(res.students || []))
+                .catch(console.error)
+            setProofFile(null) 
+            setForm(prev => ({ ...prev, status: 'LUNAS', method: 'CASH', student_id: '' })) 
         }
     }, [isOpen])
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault()
         
-        // Kirim data form beserta filenya (jika ada)
-        // Parent component (page.tsx) nanti yang akan handle uploadnya
         onSubmit({ 
             ...form, 
-            proof_file: form.status === 'LUNAS' ? proofFile : null, // Hanya kirim file jika Lunas
-            method: form.status === 'LUNAS' ? form.method : null // Reset method jika belum lunas
+            proof_file: form.status === 'LUNAS' ? proofFile : null,
+            method: form.status === 'LUNAS' ? form.method : null 
         })
     }
 
     if (!isOpen) return null
 
-    // Logic: Tampilkan input Metode & Bukti HANYA JIKA status LUNAS
     const showPaymentDetails = form.status === 'LUNAS'
 
     return (
@@ -59,7 +59,7 @@ export default function PaymentFormModal({ isOpen, onClose, onSubmit }: Props) {
 
                 <form onSubmit={handleSubmit} className="space-y-4">
                     
-                    {/* STATUS (Pindahkan ke atas agar UX lebih jelas alurnya) */}
+                    {/* STATUS */}
                     <div>
                         <label className="block text-sm font-semibold text-gray-700 mb-1">Status Pembayaran</label>
                         <select 
@@ -76,7 +76,6 @@ export default function PaymentFormModal({ isOpen, onClose, onSubmit }: Props) {
                             <option value="JATUH_TEMPO">⚠️ Jatuh Tempo </option>
                         </select>
                         
-                        {/* Info Helper untuk Jatuh Tempo */}
                         {form.status === 'JATUH_TEMPO' && (
                             <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
                                 <AlertCircle size={12}/> Status ini menandakan tagihan yang sudah lewat tenggat waktu.
@@ -95,7 +94,9 @@ export default function PaymentFormModal({ isOpen, onClose, onSubmit }: Props) {
                         >
                             <option value="">-- Pilih Murid --</option>
                             {students.map(s => (
-                                <option key={s.id} value={s.id}>{s.name} - {s.phone_number}</option>
+                                <option key={s.id} value={s.id}>
+                                    {s.name} - {s.school_origin || 'Tanpa Sekolah'}
+                                </option>
                             ))}
                         </select>
                     </div>
@@ -135,7 +136,6 @@ export default function PaymentFormModal({ isOpen, onClose, onSubmit }: Props) {
                     </div>
 
                     {/* --- CONDITIONAL RENDERING --- */}
-                    {/* Hanya muncul jika status LUNAS */}
                     {showPaymentDetails && (
                         <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 space-y-4 animate-fade-in">
                             <div className="flex items-center gap-2 mb-2 border-b border-blue-200 pb-2">

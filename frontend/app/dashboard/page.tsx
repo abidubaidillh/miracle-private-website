@@ -19,6 +19,7 @@ import {
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'
 
+// --- Interfaces ---
 interface DashboardStats {
   totalIncome: number
   totalExpense: number
@@ -49,33 +50,83 @@ export default function DashboardPage() {
   const [operasionalSummary, setOperasionalSummary] = useState<OperasionalSummary | null>(null)
   const [recentActivities, setRecentActivities] = useState<RecentActivity[]>([])
 
-  // Fetch dashboard data
+  /**
+   * Helper: Mengambil Token dari Cookie 'auth'
+   * Karena backend menggunakan cookie-parser dan mengharapkan JSON object
+   */
+  const getAuthToken = () => {
+    if (typeof document === 'undefined') return null;
+    const name = "auth=";
+    const decodedCookie = decodeURIComponent(document.cookie);
+    const ca = decodedCookie.split(';');
+    for (let i = 0; i < ca.length; i++) {
+      let c = ca[i].trim();
+      if (c.indexOf(name) === 0) {
+        try {
+          // Cookie 'auth' biasanya berisi JSON stringify dari { user, session, token }
+          const authData = JSON.parse(c.substring(name.length));
+          return authData?.session?.access_token || authData?.token;
+        } catch (e) {
+          console.error("Gagal parse cookie auth:", e);
+          return null;
+        }
+      }
+    }
+    return null;
+  };
+
+  // --- Fetch dashboard data ---
   const fetchDashboardData = async () => {
     await withLoading(async () => {
       try {
+        const token = getAuthToken();
+        
+        // Membangun Header dengan Authorization Bearer
+        const headers: HeadersInit = {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        };
+
+        /**
+         * CATATAN PENTING:
+         * Pastikan di backend index.js, route finance sudah menggunakan /api/finance
+         * Jika belum diubah, hapus '/api' pada url finance di bawah ini.
+         */
         const [financeRes, operasionalRes] = await Promise.all([
-          fetch(`${API}/api/finance/summary`, {
-            credentials: 'include'
+          fetch(`${API}/api/finance/summary`, { 
+            headers,
+            credentials: 'include' 
           }),
-          fetch(`${API}/api/operasional/summary`, {
-            credentials: 'include'
+          fetch(`${API}/api/operasional/summary`, { 
+            headers,
+            credentials: 'include' 
           })
-        ])
+        ]);
+
+        // Cek jika unauthorized (Token hangus/tidak terbaca)
+        if (financeRes.status === 401 || operasionalRes.status === 401) {
+          console.error("Unauthorized access - Checking token...");
+          // Anda bisa redirect ke login di sini jika perlu
+        }
 
         if (financeRes.ok) {
           const financeData = await financeRes.json()
           setStats(financeData.stats)
           setRecentActivities(financeData.history || [])
+        } else {
+            throw new Error(`Finance API error: ${financeRes.status}`);
         }
 
         if (operasionalRes.ok) {
           const operasionalData = await operasionalRes.json()
           setOperasionalSummary(operasionalData)
+        } else {
+            throw new Error(`Operasional API error: ${operasionalRes.status}`);
         }
 
       } catch (error: any) {
         console.error('Error fetching dashboard data:', error)
-        Swal.fire('Error', 'Gagal memuat data dashboard', 'error')
+        Swal.fire('Error', 'Gagal memuat data dashboard. Pastikan Anda sudah login.', 'error')
       }
     })
   }
@@ -84,7 +135,7 @@ export default function DashboardPage() {
     fetchDashboardData()
   }, [])
 
-  // Format currency
+  // --- Helpers ---
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('id-ID', {
       style: 'currency',
@@ -93,7 +144,6 @@ export default function DashboardPage() {
     }).format(amount)
   }
 
-  // Format date
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString('id-ID', {
       day: 'numeric',
@@ -107,12 +157,12 @@ export default function DashboardPage() {
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         {/* Pemasukan */}
-        <div className="bg-gradient-to-r from-green-500 to-green-600 p-6 rounded-xl text-white">
+        <div className="bg-gradient-to-r from-green-500 to-green-600 p-6 rounded-xl text-white shadow-md">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-green-100 text-sm font-medium">Pemasukan Bulan Ini</p>
               <p className="text-2xl font-bold">
-                {stats ? formatCurrency(stats.totalIncome) : 'Loading...'}
+                {stats ? formatCurrency(stats.totalIncome) : '...'}
               </p>
             </div>
             <TrendingUp size={32} className="text-green-200" />
@@ -120,12 +170,12 @@ export default function DashboardPage() {
         </div>
 
         {/* Pengeluaran */}
-        <div className="bg-gradient-to-r from-red-500 to-red-600 p-6 rounded-xl text-white">
+        <div className="bg-gradient-to-r from-red-500 to-red-600 p-6 rounded-xl text-white shadow-md">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-red-100 text-sm font-medium">Pengeluaran Bulan Ini</p>
               <p className="text-2xl font-bold">
-                {stats ? formatCurrency(stats.totalExpense) : 'Loading...'}
+                {stats ? formatCurrency(stats.totalExpense) : '...'}
               </p>
             </div>
             <TrendingDown size={32} className="text-red-200" />
@@ -133,7 +183,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Laba Bersih */}
-        <div className={`bg-gradient-to-r p-6 rounded-xl text-white ${
+        <div className={`bg-gradient-to-r p-6 rounded-xl text-white shadow-md ${
           stats && stats.netBalance >= 0 
             ? 'from-blue-500 to-blue-600' 
             : 'from-orange-500 to-orange-600'
@@ -142,7 +192,7 @@ export default function DashboardPage() {
             <div>
               <p className="text-blue-100 text-sm font-medium">Laba Bersih</p>
               <p className="text-2xl font-bold">
-                {stats ? formatCurrency(stats.netBalance) : 'Loading...'}
+                {stats ? formatCurrency(stats.netBalance) : '...'}
               </p>
             </div>
             <DollarSign size={32} className="text-blue-200" />
@@ -150,15 +200,15 @@ export default function DashboardPage() {
         </div>
 
         {/* Biaya Operasional */}
-        <div className="bg-gradient-to-r from-purple-500 to-purple-600 p-6 rounded-xl text-white">
+        <div className="bg-gradient-to-r from-purple-500 to-purple-600 p-6 rounded-xl text-white shadow-md">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-purple-100 text-sm font-medium">Biaya Operasional</p>
               <p className="text-2xl font-bold">
-                {operasionalSummary ? formatCurrency(operasionalSummary.totalBulanIni) : 'Loading...'}
+                {operasionalSummary ? formatCurrency(operasionalSummary.totalBulanIni) : '...'}
               </p>
               <p className="text-purple-100 text-xs mt-1">
-                {operasionalSummary?.periode}
+                {operasionalSummary?.periode || 'Memuat...'}
               </p>
             </div>
             <BookOpen size={32} className="text-purple-200" />
@@ -170,7 +220,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
         {/* Action Items */}
         <div className="lg:col-span-1">
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 h-full">
             <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
               <AlertCircle size={20} className="text-orange-500" />
               Perlu Perhatian
@@ -207,13 +257,15 @@ export default function DashboardPage() {
                   <span className="text-sm font-medium text-green-700">Semua pembayaran up to date</span>
                 </div>
               )}
+
+              {!stats && <p className="text-gray-400 text-sm italic">Memeriksa data...</p>}
             </div>
           </div>
         </div>
 
         {/* Biaya Operasional per Kategori */}
         <div className="lg:col-span-2">
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 h-full">
             <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
               <BookOpen size={20} className="text-purple-500" />
               Biaya Operasional per Kategori
@@ -272,7 +324,7 @@ export default function DashboardPage() {
           {recentActivities.length > 0 ? (
             <div className="space-y-4">
               {recentActivities.slice(0, 8).map((activity, index) => (
-                <div key={index} className="flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg transition-colors">
+                <div key={index} className="flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg transition-colors border-b border-gray-50 last:border-0">
                   <div className="flex items-center gap-3">
                     <div className={`w-2 h-2 rounded-full ${
                       activity.type === 'INCOME' ? 'bg-green-500' : 'bg-red-500'

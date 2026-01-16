@@ -79,7 +79,7 @@ async function getFinanceSummary(req, res) {
         // 4. HISTORY (Sama seperti sebelumnya)
         const { data: recentPayments } = await supabase
             .from('payments')
-            .select('id, payment_date, amount, title, students(name)')
+            .select('id, payment_date, amount, title, students!inner(name)')
             .eq('status', 'LUNAS')
             .order('payment_date', { ascending: false }).limit(10)
 

@@ -1,58 +1,28 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useUser } from '@/context/UserContext'
 import { useLoading } from '@/context/LoadingContext'
-import { AttendanceService } from '@/lib/attendanceService'
+import { AttendanceService } from '@/lib/attendanceService' // Sesuaikan path-nya
 
-export interface UseAttendanceReturn {
-  // Data
-  schedules: any[]
-  filteredSchedules: any[]
-  month: number
-  year: number
-  filterProgress: string
-  
-  // Loading states
-  isUploading: boolean
-  
-  // Modal states
-  showPhotoModal: boolean
-  selectedSchedule: any | null
-  selectedSession: number
-  
-  // Actions
-  setFilterProgress: (filter: string) => void
-  handleAttendanceSubmit: (schedule: any, sessionNumber: number) => void
-  handlePhotoSubmit: (file: File) => Promise<void>
-  closePhotoModal: () => void
-  refreshData: () => Promise<void>
-}
-
-export function useAttendance(): UseAttendanceReturn {
+export function useAttendance() {
   const { user } = useUser()
   const { withLoading } = useLoading()
   
-  // Fixed month and year (current month/year)
   const month = new Date().getMonth() + 1
   const year = new Date().getFullYear()
   
-  // Progress filter state
   const [filterProgress, setFilterProgress] = useState<string>('all')
-  
-  // Data state
   const [schedules, setSchedules] = useState<any[]>([])
-  
-  // Modal states
   const [showPhotoModal, setShowPhotoModal] = useState(false)
   const [selectedSchedule, setSelectedSchedule] = useState<any>(null)
   const [selectedSession, setSelectedSession] = useState<number>(0)
   const [isUploading, setIsUploading] = useState(false)
 
-  // Fetch data function
   const fetchData = async () => {
     if (!user) return
 
     await withLoading(async () => {
       try {
+        // Admin/Owner melihat semua, Mentor hanya miliknya
         const mentorId = user.role === 'MENTOR' ? user.id : undefined
         const data = await AttendanceService.fetchAttendance(month, year, mentorId)
         setSchedules(data)
@@ -63,69 +33,44 @@ export function useAttendance(): UseAttendanceReturn {
     })
   }
 
-  // Load data when user changes
   useEffect(() => {
-    if (user) {
-      fetchData()
-    }
+    if (user) fetchData()
   }, [user])
 
-  // Filter schedules based on progress
   const filteredSchedules = useMemo(() => {
-    if (!schedules || schedules.length === 0) return []
+    if (!schedules || !Array.isArray(schedules)) return []
     
-    switch (filterProgress) {
-      case 'in-progress':
-        return schedules.filter(schedule => {
-          const totalDone = schedule.sessions_status?.filter((s: any) => s.is_done).length || 0
-          const totalSessions = schedule.planned_sessions || schedule.sessions_status?.length || 0
-          return totalDone < totalSessions
-        })
-      case 'completed':
-        return schedules.filter(schedule => {
-          const totalDone = schedule.sessions_status?.filter((s: any) => s.is_done).length || 0
-          const totalSessions = schedule.planned_sessions || schedule.sessions_status?.length || 0
-          return totalDone >= totalSessions
-        })
-      case 'all':
-      default:
-        return schedules
+    if (filterProgress === 'in-progress') {
+      return schedules.filter(s => (s.sessions_done || 0) < (s.planned_sessions || 8))
     }
+    if (filterProgress === 'completed') {
+      return schedules.filter(s => (s.sessions_done || 0) >= (s.planned_sessions || 8))
+    }
+    return schedules
   }, [schedules, filterProgress])
 
-  // Handle attendance submission
   const handleAttendanceSubmit = async (schedule: any, sessionNumber: number) => {
     if (user?.role === 'MENTOR') {
-      // For mentors, show photo upload modal
       setSelectedSchedule(schedule)
       setSelectedSession(sessionNumber)
       setShowPhotoModal(true)
     } else {
-      // For admin/owner, direct submit without photo
+      // Logic for Admin/Owner
       try {
         await withLoading(async () => {
-          await AttendanceService.submitAttendanceWithoutPhoto(
-            schedule, 
-            sessionNumber, 
-            month, 
-            year
-          )
-          await fetchData() // Refresh data
+          await AttendanceService.submitAttendanceWithoutPhoto(schedule, sessionNumber, month, year)
+          await fetchData()
         })
-        alert('Absensi berhasil disimpan!')
-      } catch (error) {
-        alert('Gagal menyimpan absensi: ' + (error as any).message)
+      } catch (error: any) {
+        alert(error.message)
       }
     }
   }
 
-  // Handle photo submission
   const handlePhotoSubmit = async (file: File) => {
     if (!selectedSchedule || !user) return
-
+    setIsUploading(true)
     try {
-      setIsUploading(true)
-      
       await AttendanceService.submitAttendanceWithPhoto(
         selectedSchedule,
         selectedSession,
@@ -134,50 +79,34 @@ export function useAttendance(): UseAttendanceReturn {
         file,
         user.id
       )
-
-      // Reset states and refresh data
-      closePhotoModal()
+      setShowPhotoModal(false)
       await fetchData()
-      
-      alert('Absensi berhasil disimpan!')
-    } catch (error) {
-      alert('Gagal menyimpan absensi: ' + (error as any).message)
+    } catch (error: any) {
+      alert(error.message)
     } finally {
       setIsUploading(false)
     }
   }
 
-  // Close photo modal
   const closePhotoModal = () => {
     setShowPhotoModal(false)
     setSelectedSchedule(null)
-    setSelectedSession(0)
   }
 
-  // Refresh data function
-  const refreshData = fetchData
-
   return {
-    // Data
     schedules,
     filteredSchedules,
     month,
     year,
     filterProgress,
-    
-    // Loading states
     isUploading,
-    
-    // Modal states
     showPhotoModal,
     selectedSchedule,
     selectedSession,
-    
-    // Actions
     setFilterProgress,
     handleAttendanceSubmit,
     handlePhotoSubmit,
     closePhotoModal,
-    refreshData
+    refreshData: fetchData
   }
 }

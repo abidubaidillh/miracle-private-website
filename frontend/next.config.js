@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  output: 'export',          // WAJIB: Agar menghasilkan folder 'out' untuk Rumahweb
+  //output: 'export',          // WAJIB: Agar menghasilkan folder 'out' untuk Rumahweb
   images: {
     unoptimized: true,       // WAJIB: Agar gambar tidak error di hosting biasa
   },

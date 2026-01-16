@@ -1,14 +1,13 @@
-// src/controllers/murid.controller.js
+// backend/src/controllers/murid.controller.js
 
 const supabase = require('../config/supabase'); 
 
 // --- A. GET (READ ALL & Search) ---
 const getAllMurid = async (req, res) => {
-    // Variabel query dibiarkan agar tidak terjadi crash jika ada parameter
     const { status, search } = req.query; 
 
     try {
-        // 1. QUERY UTAMA: Mengaktifkan kembali sorting dan count
+        // 1. QUERY UTAMA: Mengaktifkan sorting berdasarkan nama
         let query = supabase.from('students').select('*').order('name', { ascending: true }); 
 
         // 2. LOGIKA FILTERING DAN SEARCHING
@@ -18,18 +17,17 @@ const getAllMurid = async (req, res) => {
             query = query.eq('status', status);
         }
         
-        // Filter Pencarian (Nama, No HP, Alamat, DAN NAMA ORANG TUA)
+        // Filter Pencarian
         if (search) {
-            // Update: Menambahkan parent_name ke dalam pencarian
-            query = query.or(`name.ilike.%${search}%,phone_number.ilike.%${search}%,address.ilike.%${search}%,parent_name.ilike.%${search}%`);
+            query = query.or(`name.ilike.%${search}%,school_origin.ilike.%${search}%,address.ilike.%${search}%,parent_name.ilike.%${search}%`);
         }
 
         const { data: students, error } = await query;
 
         if (error) {
-            console.error("[MuridController: getAllMurid] DATABASE ERROR (Filtered Query):", error);
+            console.error("[MuridController: getAllMurid] DATABASE ERROR:", error);
             return res.status(500).json({ 
-                message: "Gagal mengambil data murid. Kesalahan Query/Koneksi.", 
+                message: "Gagal mengambil data murid.", 
                 error: error.message 
             });
         }
@@ -38,7 +36,6 @@ const getAllMurid = async (req, res) => {
         const { count: totalActive } = await supabase.from('students').select('id', { count: 'exact', head: true }).eq('status', 'AKTIF');
         const { count: totalInactive } = await supabase.from('students').select('id', { count: 'exact', head: true }).eq('status', 'NON-AKTIF');
 
-        
         // 4. RESPONSE
         res.status(200).json({ 
             students, 
@@ -50,36 +47,28 @@ const getAllMurid = async (req, res) => {
         
     } catch (err) {
         console.error("[MuridController: getAllMurid] Unhandled Server Error:", err);
-        res.status(500).json({ message: "Terjadi kesalahan server yang tidak terduga.", error: err.message });
+        res.status(500).json({ message: "Terjadi kesalahan server.", error: err.message });
     }
 };
 
 
 // --- B. POST (CREATE) ---
 const createMurid = async (req, res) => {
-    // 1. Ambil semua field yang dibutuhkan (TERMASUK DATA ORANG TUA)
+    // 1. Ambil field dari body (Update: Menggunakan school_origin)
     const { 
         name, 
         age, 
-        phone_number, 
+        school_origin, 
         address, 
         status, 
         package_id,
-        parent_name,  // <--- TAMBAHAN
-        parent_phone  // <--- TAMBAHAN
+        parent_name,
+        parent_phone
     } = req.body; 
-    
-    // ==========================================================
-    // 🚨 DEBUGGING: LOG BODY REQUEST
-    // ==========================================================
-    // Removed console.log for production
-    // ==========================================================
 
-    // Validasi Wajib Isi (Update: Menambahkan parent_name & parent_phone sebagai wajib isi jika diinginkan)
-    // Jika data ortu opsional, hapus parent_name/phone dari validasi di bawah ini.
-    if (!name || !phone_number || !address || age === undefined || age === null || !parent_name || !parent_phone) {
-        console.error("[MuridController: createMurid] Validation Failed: Missing required fields.");
-        return res.status(400).json({ message: "Nama, Usia, No HP, Alamat, Nama Ortu, dan HP Ortu wajib diisi." });
+    // Validasi Wajib Isi
+    if (!name || !school_origin || !address || age === undefined || age === null || !parent_name || !parent_phone) {
+        return res.status(400).json({ message: "Nama, Usia, Asal Sekolah, Alamat, Nama Ortu, dan HP Ortu wajib diisi." });
     }
     
     // Validasi Usia
@@ -93,21 +82,20 @@ const createMurid = async (req, res) => {
     const validStatuses = ['AKTIF', 'NON-AKTIF'];
     
     if (!validStatuses.includes(studentStatus)) {
-        return res.status(400).json({ message: "Status tidak valid. Gunakan 'AKTIF' atau 'NON-AKTIF'." });
+        return res.status(400).json({ message: "Status tidak valid." });
     }
     
-    // Objek Data yang akan di-Insert (UPDATE FIELD DATABASE)
+    // Objek Data untuk Insert
     const insertData = { 
         name, 
         age: parsedAge, 
-        phone_number, 
+        school_origin, 
         address, 
         status: studentStatus,
-        parent_name,  // <--- MASUKKAN KE DB
-        parent_phone  // <--- MASUKKAN KE DB
+        parent_name,
+        parent_phone
     };
 
-    // Tambahkan package_id jika ada
     if (package_id !== undefined) {
           insertData.package_id = package_id;
     }
@@ -120,68 +108,51 @@ const createMurid = async (req, res) => {
             .single(); 
 
         if (error) {
-            console.error("[MuridController: createMurid] SUPABASE INSERT ERROR:", error);
-            return res.status(500).json({ 
-                message: "Gagal menyimpan data ke database.", 
-                error: error.message 
-            });
-        }
-        
-        // Pengecekan Kegagalan Silent
-        if (!data) {
-            console.error("[MuridController: createMurid] WARNING: Insert failed silently.");
-            return res.status(500).json({ 
-               message: "Gagal menambahkan murid. Kegagalan database tidak terduga.", 
-               error: "Silent Database Failure" 
-            });
+            console.error("[MuridController: createMurid] SUPABASE ERROR:", error);
+            return res.status(500).json({ message: "Gagal menyimpan ke database.", error: error.message });
         }
 
         res.status(201).json({ message: "Data murid berhasil ditambahkan.", student: data });
     } catch (err) {
-        console.error("[MuridController: createMurid] SERVER CRASHED:", err);
-        res.status(500).json({ message: "Terjadi kesalahan server yang tidak terduga.", error: err.message });
+        console.error("[MuridController: createMurid] SERVER ERROR:", err);
+        res.status(500).json({ message: "Terjadi kesalahan server.", error: err.message });
     }
 };
 
 // --- C. PUT (UPDATE) ---
 const updateMurid = async (req, res) => {
     const { id } = req.params;
-    
-    // req.body akan otomatis berisi parent_name & parent_phone jika dikirim dari frontend
-    // karena kita mengambil seluruh objek body.
     const updateData = req.body; 
 
     try {
-        // Normalisasi dan Validasi Status
+        // Normalisasi Status jika ada
         if (updateData.status) {
              const normalizedStatus = updateData.status.toUpperCase();
              const validStatuses = ['AKTIF', 'NON-AKTIF'];
-
              if (!validStatuses.includes(normalizedStatus)) {
-                 return res.status(400).json({ message: "Status yang diperbarui tidak valid." });
+                 return res.status(400).json({ message: "Status tidak valid." });
              }
              updateData.status = normalizedStatus;
         }
         
-        // Validasi Usia
+        // Validasi Usia jika ada
         if (updateData.age !== undefined && updateData.age !== null) {
              const parsedAge = parseInt(updateData.age);
              if (isNaN(parsedAge) || parsedAge <= 0) {
-                 return res.status(400).json({ message: "Usia harus berupa angka positif yang valid." });
+                 return res.status(400).json({ message: "Usia tidak valid." });
              }
              updateData.age = parsedAge;
         }
 
         const { data, error } = await supabase
             .from('students') 
-            .update(updateData) // Update dinamis (field baru otomatis ter-update)
+            .update(updateData)
             .eq('id', id)
             .select()
             .single(); 
 
         if (error) {
-            console.error("[MuridController: updateMurid] Database Error updating student:", error);
-            return res.status(500).json({ message: "Gagal memperbarui data murid (Database Error).", error: error.message });
+            return res.status(500).json({ message: "Gagal memperbarui data (Database Error).", error: error.message });
         }
         if (!data) {
             return res.status(404).json({ message: "Murid tidak ditemukan." });
@@ -189,8 +160,7 @@ const updateMurid = async (req, res) => {
 
         res.status(200).json({ message: "Data murid berhasil diperbarui.", student: data });
     } catch (err) {
-        console.error("[MuridController: updateMurid] Unhandled Error:", err);
-        res.status(500).json({ message: "Terjadi kesalahan server yang tidak terduga." });
+        res.status(500).json({ message: "Terjadi kesalahan server." });
     }
 };
 
@@ -199,22 +169,18 @@ const deleteMurid = async (req, res) => {
     const { id } = req.params;
 
     try {
-        // Lakukan DELETE
-        const { error: deleteError, count } = await supabase
+        const { error } = await supabase
             .from('students') 
             .delete()
-            .eq('id', id)
-            .select('*', { count: 'exact' });
+            .eq('id', id);
 
-        if (deleteError) {
-            console.error("[MuridController: deleteMurid] Error executing delete:", deleteError);
-            return res.status(500).json({ message: "Gagal menghapus data murid (Database Error).", error: deleteError.message });
+        if (error) {
+            return res.status(500).json({ message: "Gagal menghapus data (Database Error).", error: error.message });
         }
         
         res.status(200).json({ message: "Data murid berhasil dihapus." });
     } catch (err) {
-        console.error("[MuridController: deleteMurid] Unhandled Error:", err);
-        res.status(500).json({ message: "Terjadi kesalahan server yang tidak terduga." });
+        res.status(500).json({ message: "Terjadi kesalahan server." });
     }
 };
 

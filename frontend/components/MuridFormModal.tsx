@@ -2,7 +2,7 @@
 "use client"
 
 import React, { useState, useEffect } from 'react';
-import { X, Plus } from 'lucide-react'; 
+import { X, Plus, Save } from 'lucide-react'; 
 import { createStudent, updateStudent, Student } from '@/lib/studentActions'; 
 
 interface MuridFormModalProps {
@@ -12,7 +12,6 @@ interface MuridFormModalProps {
     editingStudent: Student | null; 
 }
 
-// Helper Input Component (Style Pill)
 const PillInput = ({ label, ...props }: any) => (
     <div className="flex flex-col gap-2">
         <label className="text-sm font-semibold text-gray-700 ml-1">{label}</label>
@@ -26,8 +25,15 @@ const PillInput = ({ label, ...props }: any) => (
 const MuridFormModal: React.FC<MuridFormModalProps> = ({ isOpen, onClose, onSuccess, editingStudent }) => {
     
     const [formData, setFormData] = useState({
-        name: '', age: '', phone_number: '', address: '', parent_name: '', parent_phone: '', status: 'AKTIF'
+        name: '', 
+        age: '', 
+        school_origin: '',
+        address: '', 
+        parent_name: '', 
+        parent_phone: '', 
+        status: 'AKTIF' as 'AKTIF' | 'NON-AKTIF'
     });
+    
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -38,14 +44,17 @@ const MuridFormModal: React.FC<MuridFormModalProps> = ({ isOpen, onClose, onSucc
             setFormData({
                 name: editingStudent.name,
                 age: editingStudent.age.toString(),
-                phone_number: editingStudent.phone_number,
+                school_origin: editingStudent.school_origin || '', // <--- SESUAIKAN
                 address: editingStudent.address,
-                parent_name: (editingStudent as any).parent_name || '',
-                parent_phone: (editingStudent as any).parent_phone || '',
+                parent_name: editingStudent.parent_name || '',
+                parent_phone: editingStudent.parent_phone || '',
                 status: editingStudent.status
             });
         } else {
-            setFormData({ name: '', age: '', phone_number: '', address: '', parent_name: '', parent_phone: '', status: 'AKTIF' });
+            setFormData({ 
+                name: '', age: '', school_origin: '', address: '', 
+                parent_name: '', parent_phone: '', status: 'AKTIF' 
+            });
         }
         setError(null);
     }, [editingStudent, isOpen]);
@@ -56,8 +65,8 @@ const MuridFormModal: React.FC<MuridFormModalProps> = ({ isOpen, onClose, onSucc
         setError(null);
 
         // Validasi Sederhana
-        if (!formData.name || !formData.phone_number) {
-             setError("Nama dan Nomor HP wajib diisi.");
+        if (!formData.name || !formData.school_origin) {
+             setError("Nama dan Asal Sekolah wajib diisi.");
              setLoading(false);
              return;
         }
@@ -85,7 +94,7 @@ const MuridFormModal: React.FC<MuridFormModalProps> = ({ isOpen, onClose, onSucc
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[95vh]">
                 
-                {/* Header Biru Solid */}
+                {/* Header */}
                 <div className="bg-[#0077AF] px-6 py-5 flex justify-between items-center relative">
                     <h2 className="text-white text-xl font-bold mx-auto">
                         {isEditMode ? 'Edit Data Murid' : 'Tambah Murid Baru'}
@@ -105,33 +114,46 @@ const MuridFormModal: React.FC<MuridFormModalProps> = ({ isOpen, onClose, onSucc
                         )}
 
                         <PillInput 
-                            label="Nama Lengkap *" value={formData.name} 
+                            label="Nama Lengkap *" 
+                            placeholder="Masukkan nama murid"
+                            value={formData.name} 
                             onChange={(e:any) => setFormData({...formData, name: e.target.value})} 
                         />
 
                         <div className="grid grid-cols-2 gap-4">
+                            {/* INPUT ASAL SEKOLAH (PENGGANTI NO HP) */}
                             <PillInput 
-                                label="No HP *" placeholder="08..." value={formData.phone_number}
-                                onChange={(e:any) => setFormData({...formData, phone_number: e.target.value})} 
+                                label="Asal Sekolah *" 
+                                placeholder="Contoh: SDN 01 Pusat" 
+                                value={formData.school_origin}
+                                onChange={(e:any) => setFormData({...formData, school_origin: e.target.value})} 
                             />
                             <PillInput 
-                                label="Usia *" type="number" value={formData.age}
+                                label="Usia *" 
+                                type="number" 
+                                value={formData.age}
                                 onChange={(e:any) => setFormData({...formData, age: e.target.value})} 
                             />
                         </div>
 
                         <PillInput 
-                            label="Alamat *" value={formData.address}
+                            label="Alamat *" 
+                            placeholder="Alamat lengkap tempat tinggal"
+                            value={formData.address}
                             onChange={(e:any) => setFormData({...formData, address: e.target.value})} 
                         />
 
                         <div className="grid grid-cols-2 gap-4">
                             <PillInput 
-                                label="Nama Ortu *" value={formData.parent_name}
+                                label="Nama Orang Tua *" 
+                                placeholder="Nama Ayah/Ibu"
+                                value={formData.parent_name}
                                 onChange={(e:any) => setFormData({...formData, parent_name: e.target.value})} 
                             />
                             <PillInput 
-                                label="No HP (Ortu) *" placeholder="08..." value={formData.parent_phone}
+                                label="No HP Orang Tua *" 
+                                placeholder="08..." 
+                                value={formData.parent_phone}
                                 onChange={(e:any) => setFormData({...formData, parent_phone: e.target.value})} 
                             />
                         </div>
@@ -143,7 +165,7 @@ const MuridFormModal: React.FC<MuridFormModalProps> = ({ isOpen, onClose, onSucc
                                 <select 
                                     className="w-full border border-gray-400 rounded-full px-5 py-2.5 focus:outline-none appearance-none bg-white text-sm cursor-pointer hover:border-[#0077AF]"
                                     value={formData.status}
-                                    onChange={(e) => setFormData({...formData, status: e.target.value})}
+                                    onChange={(e) => setFormData({...formData, status: e.target.value as any})}
                                 >
                                     <option value="AKTIF">Aktif</option>
                                     <option value="NON-AKTIF">Non-Aktif</option>
@@ -159,8 +181,19 @@ const MuridFormModal: React.FC<MuridFormModalProps> = ({ isOpen, onClose, onSucc
                             <button type="button" onClick={onClose} className="px-8 py-3 rounded-full border border-gray-300 text-gray-700 font-bold shadow-sm hover:bg-gray-50 transition">
                                 Batal
                             </button>
-                            <button type="submit" disabled={loading} className="px-6 py-3 rounded-full bg-[#00558F] text-white font-bold shadow-md hover:bg-[#004475] flex items-center transition disabled:opacity-70">
-                                <Plus size={20} className="mr-2" /> {loading ? 'Menyimpan...' : (isEditMode ? 'Simpan Data' : 'Tambah Murid')}
+                            <button 
+                                type="submit" 
+                                disabled={loading} 
+                                className="px-6 py-3 rounded-full bg-[#00558F] text-white font-bold shadow-md hover:bg-[#004475] flex items-center transition disabled:opacity-70"
+                            >
+                                {loading ? (
+                                    'Menyimpan...'
+                                ) : (
+                                    <>
+                                        {isEditMode ? <Save size={20} className="mr-2" /> : <Plus size={20} className="mr-2" />}
+                                        {isEditMode ? 'Simpan Perubahan' : 'Tambah Murid'}
+                                    </>
+                                )}
                             </button>
                         </div>
                     </form>

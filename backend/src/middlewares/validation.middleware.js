@@ -1,9 +1,13 @@
+// backend/src/middlewares/validation.middleware.js
+
 const Joi = require('joi');
+
+// --- A. SCHEMA MURID (STUDENT) ---
 
 const studentValidationSchema = Joi.object({
     name: Joi.string().min(3).max(100).required(),
     age: Joi.number().integer().min(1).required(),
-    phone_number: Joi.string().pattern(/^\+?[1-9]\d{9,14}$/).optional().allow(null, ''),
+    school_origin: Joi.string().max(100).optional().allow(null, ''),
     address: Joi.string().max(255).optional().allow(null, ''),
     status: Joi.string().valid('AKTIF', 'NON-AKTIF').uppercase().default('AKTIF'),
     package_id: Joi.number().integer().optional().allow(null),
@@ -14,77 +18,20 @@ const studentValidationSchema = Joi.object({
 const updateStudentValidationSchema = Joi.object({
     name: Joi.string().min(3).max(100).optional(),
     age: Joi.number().integer().min(1).optional(),
-    phone_number: Joi.string().pattern(/^\+?[1-9]\d{9,14}$/).optional().allow(null, ''),
+    school_origin: Joi.string().max(100).optional().allow(null, ''),
     address: Joi.string().max(255).optional().allow(null, ''),
     status: Joi.string().valid('AKTIF', 'NON-AKTIF').uppercase().optional(),
     package_id: Joi.number().integer().optional().allow(null),
     parent_name: Joi.string().min(3).max(100).optional(),
     parent_phone: Joi.string().pattern(/^\+?[1-9]\d{9,14}$/).optional(),
-}).min(1).message('Request body cannot be empty'); // Ensure at least one field is provided for update
+}).min(1).message('Request body cannot be empty');
 
+// --- B. SCHEMA KEUANGAN & TRANSAKSI ---
 const moneyValidationSchema = Joi.object({
     amount: Joi.number().min(0).required(),
     description: Joi.string().max(255).optional().allow(null, ''),
 });
 
-const registerValidationSchema = Joi.object({
-    username: Joi.string().trim().min(3).required().messages({
-        'string.empty': 'Username cannot be empty',
-        'string.min': 'Username must be at least 3 characters long'
-    }),
-    email: Joi.string().email().required().messages({
-        'string.email': 'Invalid email address',
-        'string.empty': 'Email cannot be empty'
-    }),
-    password: Joi.string().min(6).required().messages({
-        'string.min': 'Password must be at least 6 characters long',
-        'string.empty': 'Password cannot be empty'
-    }),
-    phone_number: Joi.string().pattern(/^\+?[1-9]\d{9,14}$/).required().messages({
-        'string.pattern': 'Invalid phone number format',
-        'string.empty': 'Phone number cannot be empty'
-    }),
-    birthday: Joi.date().iso().required().messages({
-        'date.iso': 'Invalid birthday format (YYYY-MM-DD)',
-        'any.required': 'Birthday cannot be empty'
-    })
-});
-
-const loginValidationSchema = Joi.object({
-    email: Joi.string().email().required().messages({
-        'string.email': 'Invalid email address',
-        'string.empty': 'Email cannot be empty'
-    }),
-    password: Joi.string().required().messages({
-        'string.empty': 'Password cannot be empty'
-    })
-});
-
-const registerInternalValidationSchema = Joi.object({
-    username: Joi.string().trim().min(3).required().messages({
-        'string.empty': 'Username cannot be empty',
-        'string.min': 'Username must be at least 3 characters long'
-    }),
-    email: Joi.string().email().required().messages({
-        'string.email': 'Invalid email address',
-        'string.empty': 'Email cannot be empty'
-    }),
-    password: Joi.string().min(6).required().messages({
-        'string.min': 'Password must be at least 6 characters long',
-        'string.empty': 'Password cannot be empty'
-    }),
-    role: Joi.string().valid('OWNER', 'ADMIN', 'BENDAHARA', 'MENTOR').uppercase().required().messages({
-        'any.only': 'Invalid role specified',
-        'string.empty': 'Role cannot be empty'
-    }),
-    phone_number: Joi.string().pattern(/^\+?[1-9]\d{9,14}$/).optional().allow(null, ''),
-    birthday: Joi.date().iso().optional().allow(null),
-    salary_per_session: Joi.number().integer().min(0).optional().allow(null),
-    subjects: Joi.string().optional().allow(null, ''),
-    expertise: Joi.string().optional().allow(null, ''),
-});
-
-// Transaction validation schemas
 const transactionValidationSchema = Joi.object({
     date: Joi.date().iso().required().messages({
         'date.iso': 'Invalid date format (YYYY-MM-DD)',
@@ -106,15 +53,36 @@ const transactionValidationSchema = Joi.object({
     })
 });
 
+// --- C. SCHEMA AUTH & USER (TETAP MENGGUNAKAN No. HP) ---
+const registerValidationSchema = Joi.object({
+    username: Joi.string().trim().min(3).required(),
+    email: Joi.string().email().required(),
+    password: Joi.string().min(6).required(),
+    phone_number: Joi.string().pattern(/^\+?[1-9]\d{9,14}$/).required(),
+    birthday: Joi.date().iso().required()
+});
+
+const loginValidationSchema = Joi.object({
+    email: Joi.string().email().required(),
+    password: Joi.string().required()
+});
+
+const registerInternalValidationSchema = Joi.object({
+    username: Joi.string().trim().min(3).required(),
+    email: Joi.string().email().required(),
+    password: Joi.string().min(6).required(),
+    role: Joi.string().valid('OWNER', 'ADMIN', 'BENDAHARA', 'MENTOR').uppercase().required(),
+    phone_number: Joi.string().pattern(/^\+?[1-9]\d{9,14}$/).optional().allow(null, ''),
+    birthday: Joi.date().iso().optional().allow(null),
+    salary_per_session: Joi.number().integer().min(0).optional().allow(null),
+    subjects: Joi.string().optional().allow(null, ''),
+    expertise: Joi.string().optional().allow(null, ''),
+});
+
+// --- D. SCHEMA MENTOR & JADWAL ---
 const mentorValidationSchema = Joi.object({
-    name: Joi.string().min(3).max(100).required().messages({
-        'string.empty': 'Name cannot be empty',
-        'string.min': 'Name must be at least 3 characters long'
-    }),
-    email: Joi.string().email().required().messages({
-        'string.email': 'Invalid email address',
-        'string.empty': 'Email cannot be empty'
-    }),
+    name: Joi.string().min(3).max(100).required(),
+    email: Joi.string().email().required(),
     phone_number: Joi.string().pattern(/^\+?[1-9]\d{9,14}$/).optional().allow(null, ''),
     address: Joi.string().max(255).optional().allow(null, ''),
     subject: Joi.string().optional().allow(null, ''),
@@ -124,34 +92,16 @@ const mentorValidationSchema = Joi.object({
 });
 
 const scheduleValidationSchema = Joi.object({
-    student_id: Joi.string().uuid().required().messages({
-        'string.guid': 'Student ID must be a valid UUID',
-        'any.required': 'Student ID is required'
-    }),
-    mentor_id: Joi.string().uuid().required().messages({
-        'string.guid': 'Mentor ID must be a valid UUID',
-        'any.required': 'Mentor ID is required'
-    }),
-    date: Joi.date().iso().required().messages({
-        'date.iso': 'Invalid date format (YYYY-MM-DD)',
-        'any.required': 'Date is required'
-    }),
-    start_time: Joi.string().pattern(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).required().messages({
-        'string.pattern': 'Start time must be in HH:MM format',
-        'any.required': 'Start time is required'
-    }),
-    end_time: Joi.string().pattern(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).required().messages({
-        'string.pattern': 'End time must be in HH:MM format',
-        'any.required': 'End time is required'
-    }),
+    student_id: Joi.string().uuid().required(),
+    mentor_id: Joi.string().uuid().required(),
+    date: Joi.date().iso().required(),
+    start_time: Joi.string().pattern(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).required(),
+    end_time: Joi.string().pattern(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).required(),
     subject: Joi.string().optional().allow(null, ''),
-    planned_sessions: Joi.number().integer().min(1).max(31).default(4).messages({
-        'number.base': 'Planned sessions must be a number',
-        'number.min': 'Planned sessions must be at least 1',
-        'number.max': 'Planned sessions cannot exceed 31'
-    })
+    planned_sessions: Joi.number().integer().min(1).max(31).default(4)
 });
 
+// --- E. VALIDATOR FUNCTION ---
 const validateSchema = (schema) => (req, res, next) => {
     const { error } = schema.validate(req.body, { abortEarly: false, allowUnknown: true });
     if (error) {

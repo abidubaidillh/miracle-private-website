@@ -5,12 +5,11 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL
     : 'http://localhost:4000/api/students';
 
 // =============================================================================
-// HELPER: Get Auth Headers (WAJIB untuk menembus Middleware Backend)
+// HELPER: Get Auth Headers
 // =============================================================================
 const getHeaders = () => {
     let token = '';
     if (typeof document !== 'undefined') {
-        // Cari cookie bernama 'auth'
         const match = document.cookie.match(new RegExp('(^| )auth=([^;]+)'));
         if (match) {
             try {
@@ -34,7 +33,7 @@ export interface Student {
     id: string; 
     name: string;
     age: number;
-    phone_number: string; 
+    school_origin: string;
     address: string;
     parent_name: string; 
     parent_phone: string;
@@ -51,7 +50,7 @@ interface StudentDataResponse {
 }
 
 // =============================================================================
-// 1. GET (READ ALL & Search) - Digunakan juga oleh Modal Pembayaran
+// 1. GET (READ ALL & Search)
 // =============================================================================
 export async function getStudents(search: string = ""): Promise<StudentDataResponse> {
     const params = new URLSearchParams();
@@ -62,7 +61,7 @@ export async function getStudents(search: string = ""): Promise<StudentDataRespo
     try {
         const response = await fetch(url, {
             method: 'GET',
-            headers: getHeaders(), // ✅ Pakai Token
+            headers: getHeaders(),
             cache: 'no-store', 
         });
 
@@ -72,11 +71,10 @@ export async function getStudents(search: string = ""): Promise<StudentDataRespo
         }
 
         const data: StudentDataResponse = await response.json();
-        return data; // Mengembalikan { students: [], stats: {} }
+        return data; 
         
     } catch (e: any) {
         console.error("Error fetching students:", e);
-        // Return fallback kosong agar UI tidak crash
         return { students: [], stats: { active: 0, inactive: 0 } };
     }
 }
@@ -84,17 +82,18 @@ export async function getStudents(search: string = ""): Promise<StudentDataRespo
 // =============================================================================
 // 2. POST (CREATE)
 // =============================================================================
-export async function createStudent(newStudentData: any): Promise<Student> {
+export async function createStudent(newStudentData: Omit<Student, 'id'>): Promise<Student> {
     const response = await fetch(API_BASE_URL, {
         method: 'POST',
-        headers: getHeaders(), // ✅ Pakai Token
-        body: JSON.stringify(newStudentData),
+        headers: getHeaders(),
+        body: JSON.stringify(newStudentData), // Pastikan di Form UI, key-nya sudah 'school_origin'
     });
 
     const result = await response.json();
 
     if (!response.ok) {
-        throw new Error(result.message || 'Gagal menambahkan murid baru.');
+        // Jika Joi Validation gagal, error akan muncul di sini
+        throw new Error(result.message || result.errors?.[0]?.school_origin || 'Gagal menambahkan murid baru.');
     }
     
     return result.student as Student;
@@ -103,10 +102,10 @@ export async function createStudent(newStudentData: any): Promise<Student> {
 // =============================================================================
 // 3. PUT (UPDATE)
 // =============================================================================
-export async function updateStudent(studentId: string, updateData: any): Promise<Student> {
+export async function updateStudent(studentId: string, updateData: Partial<Student>): Promise<Student> {
     const response = await fetch(`${API_BASE_URL}/${studentId}`, {
         method: 'PUT',
-        headers: getHeaders(), // ✅ Pakai Token
+        headers: getHeaders(),
         body: JSON.stringify(updateData),
     });
 
@@ -125,7 +124,7 @@ export async function updateStudent(studentId: string, updateData: any): Promise
 export async function deleteStudent(studentId: string): Promise<void> {
     const response = await fetch(`${API_BASE_URL}/${studentId}`, {
         method: 'DELETE',
-        headers: getHeaders(), // ✅ Pakai Token
+        headers: getHeaders(),
     });
 
     if (!response.ok) {

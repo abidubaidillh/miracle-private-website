@@ -4,14 +4,14 @@ import React, { useState, useEffect } from 'react'
 import DashboardLayout from '@/components/DashboardLayout'
 import { 
     Search, UserPlus, Pencil, Trash2, X, Save, 
-    Users, CheckCircle, XCircle, User, Phone, MapPin, Smile
+    Users, CheckCircle, XCircle, User, MapPin, Smile, School
 } from 'lucide-react'
 import { getStudents, createStudent, updateStudent, deleteStudent, Student } from '@/lib/studentActions'
 import { useLoading } from '@/context/LoadingContext'
 import { useUser } from '@/context/UserContext'
 
 // =============================================================================
-// KOMPONEN: STAT CARD (Updated Design)
+// KOMPONEN: STAT CARD
 // =============================================================================
 const StatCard = ({ icon: Icon, count, label, colorClass, iconColor }: any) => (
     <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 flex items-center gap-4 transition-transform hover:scale-[1.02]">
@@ -39,7 +39,7 @@ function StudentModal({ isOpen, onClose, onSubmit, initialData }: ModalProps) {
     const [formData, setFormData] = useState({
         name: '',
         age: '',
-        phone_number: '',
+        school_origin: '',
         address: '',
         parent_name: '',
         parent_phone: '',
@@ -51,14 +51,14 @@ function StudentModal({ isOpen, onClose, onSubmit, initialData }: ModalProps) {
             setFormData({
                 name: initialData.name,
                 age: initialData.age.toString(),
-                phone_number: initialData.phone_number,
+                school_origin: initialData.school_origin || '', // <--- UBAH
                 address: initialData.address || '',
                 parent_name: initialData.parent_name || '',
                 parent_phone: initialData.parent_phone || '',
                 status: initialData.status
             })
         } else {
-            setFormData({ name: '', age: '', phone_number: '', address: '', parent_name: '', parent_phone: '', status: 'AKTIF' })
+            setFormData({ name: '', age: '', school_origin: '', address: '', parent_name: '', parent_phone: '', status: 'AKTIF' })
         }
     }, [initialData, isOpen])
 
@@ -73,7 +73,6 @@ function StudentModal({ isOpen, onClose, onSubmit, initialData }: ModalProps) {
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 backdrop-blur-sm transition-opacity px-4">
             <div className="bg-white rounded-xl w-full max-w-lg shadow-2xl animate-fade-in max-h-[90vh] overflow-y-auto flex flex-col">
                 
-                {/* Header Modal */}
                 <div className="flex justify-between items-center p-6 border-b sticky top-0 bg-white z-10">
                     <div>
                         <h2 className="font-bold text-xl text-gray-800">
@@ -86,10 +85,7 @@ function StudentModal({ isOpen, onClose, onSubmit, initialData }: ModalProps) {
                     </button>
                 </div>
 
-                {/* Form Content */}
                 <form onSubmit={handleSubmit} className="p-6 space-y-5">
-                    
-                    {/* Data Pribadi */}
                     <div className="space-y-4">
                         <h4 className="text-xs font-bold text-[#0077AF] uppercase tracking-wider flex items-center gap-2 border-b pb-2">
                             <Smile size={14}/> Data Pribadi
@@ -111,10 +107,11 @@ function StudentModal({ isOpen, onClose, onSubmit, initialData }: ModalProps) {
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-1">No HP Murid</label>
-                                <input type="text" placeholder="08..."
+                                {/* UBAH: Input Asal Sekolah */}
+                                <label className="block text-sm font-semibold text-gray-700 mb-1">Asal Sekolah</label>
+                                <input required type="text" placeholder="SDN/SMP..."
                                     className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-[#0077AF] outline-none transition"
-                                    value={formData.phone_number} onChange={e => setFormData({...formData, phone_number: e.target.value})} 
+                                    value={formData.school_origin} onChange={e => setFormData({...formData, school_origin: e.target.value})} 
                                 />
                             </div>
                         </div>
@@ -128,7 +125,6 @@ function StudentModal({ isOpen, onClose, onSubmit, initialData }: ModalProps) {
                         </div>
                     </div>
                     
-                    {/* Data Orang Tua */}
                     <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 space-y-4">
                         <h4 className="text-xs font-bold text-[#0077AF] uppercase tracking-wider flex items-center gap-2">
                             <User size={14}/> Data Orang Tua / Wali
@@ -180,20 +176,15 @@ export default function MuridPage() {
     const { withLoading } = useLoading()
     const { user } = useUser()
     
-    // State Data
     const [searchQuery, setSearchQuery] = useState('')
     const [students, setStudents] = useState<Student[]>([])
     const [stats, setStats] = useState({ active: 0, inactive: 0 })
-    
-    // State UI
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [editingStudent, setEditingStudent] = useState<Student | null>(null)
 
-    // Hak Akses
     const role = user?.role || ''
     const canEdit = ['OWNER', 'ADMIN'].includes(role)
 
-    // Fetch Data
     const fetchStudents = async () => {
         await withLoading(async () => {
             try {
@@ -206,7 +197,6 @@ export default function MuridPage() {
         })
     }
 
-    // Effect Search (Debounce)
     useEffect(() => {
         const timer = setTimeout(() => {
             fetchStudents()
@@ -214,7 +204,6 @@ export default function MuridPage() {
         return () => clearTimeout(timer)
     }, [searchQuery])
 
-    // Handler Submit
     const handleFormSubmit = async (formData: any) => {
         await withLoading(async () => {
             try {
@@ -232,7 +221,6 @@ export default function MuridPage() {
         })
     }
 
-    // Handler Delete
     const handleDelete = async (id: string, name: string) => {
         if (!confirm(`Yakin ingin menghapus data murid: ${name}?`)) return
 
@@ -246,20 +234,9 @@ export default function MuridPage() {
         })
     }
 
-    const openCreateModal = () => {
-        setEditingStudent(null)
-        setIsModalOpen(true)
-    }
-
-    const openEditModal = (student: Student) => {
-        setEditingStudent(student)
-        setIsModalOpen(true)
-    }
-
     return (
         <DashboardLayout title="Data Murid">
             
-            {/* Bagian Statistik */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
                 <StatCard 
                     icon={Users} 
@@ -281,12 +258,11 @@ export default function MuridPage() {
                 />
             </div>
 
-            {/* Action Bar */}
             <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
                 <div className="relative w-full md:w-96 group">
                     <input
                         type="text"
-                        placeholder="Cari nama, HP, atau orang tua..."
+                        placeholder="Cari nama, asal sekolah, atau orang tua..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0077AF] shadow-sm transition-all group-hover:border-gray-300"
@@ -296,7 +272,7 @@ export default function MuridPage() {
 
                 {canEdit && (
                     <button
-                        onClick={openCreateModal}
+                        onClick={() => { setEditingStudent(null); setIsModalOpen(true); }}
                         className="flex items-center px-6 py-2.5 bg-[#0077AF] text-white rounded-lg font-bold text-sm hover:bg-[#006699] transition shadow-md w-full md:w-auto justify-center gap-2"
                     >
                         <UserPlus size={18} /> Tambah Murid
@@ -304,13 +280,12 @@ export default function MuridPage() {
                 )}
             </div>
 
-            {/* Table */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse">
                         <thead className="bg-gray-50 text-gray-700 border-b border-gray-200">
                             <tr>
-                                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider">Nama Murid</th>
+                                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider">Nama & Asal Sekolah</th>
                                 <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-center">Usia</th>
                                 <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider">Data Orang Tua</th>
                                 <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-center">Status</th>
@@ -329,9 +304,10 @@ export default function MuridPage() {
                                     <tr key={m.id} className="hover:bg-blue-50/30 transition-colors group">
                                         <td className="px-6 py-4">
                                             <div className="font-bold text-gray-800">{m.name}</div>
-                                            <div className="flex items-center gap-1 text-xs text-gray-500 mt-1">
-                                                <Phone size={10} />
-                                                <span className="font-mono">{m.phone_number || '-'}</span>
+                                            {/* UBAH: Tampilan Asal Sekolah di Tabel */}
+                                            <div className="flex items-center gap-1 text-xs text-[#0077AF] mt-1 font-medium">
+                                                <School size={10} />
+                                                <span>{m.school_origin || 'Sekolah belum diisi'}</span>
                                             </div>
                                             {m.address && (
                                                 <div className="flex items-start gap-1 text-xs text-gray-400 mt-1 italic max-w-[200px] truncate">
@@ -349,7 +325,7 @@ export default function MuridPage() {
                                             <p className="text-sm font-semibold text-gray-700">{m.parent_name}</p>
                                             <div className="flex items-center gap-2 mt-1">
                                                 <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-bold uppercase border border-green-200">WA</span>
-                                                <span className="text-xs text-[#0077AF] font-mono hover:underline cursor-pointer">{m.parent_phone}</span>
+                                                <span className="text-xs text-gray-600 font-mono">{m.parent_phone}</span>
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 text-center">
@@ -363,18 +339,16 @@ export default function MuridPage() {
                                         </td>
                                         {canEdit && (
                                             <td className="px-6 py-4 text-center">
-                                                <div className="flex justify-center gap-2 opacity-100">
+                                                <div className="flex justify-center gap-2">
                                                     <button 
-                                                        onClick={() => openEditModal(m)} 
-                                                        className="p-2 bg-yellow-50 text-yellow-600 hover:bg-yellow-100 rounded-lg transition-all border border-yellow-200 shadow-sm"
-                                                        title="Edit Data"
+                                                        onClick={() => { setEditingStudent(m); setIsModalOpen(true); }} 
+                                                        className="p-2 bg-yellow-50 text-yellow-600 hover:bg-yellow-100 rounded-lg border border-yellow-200"
                                                     >
                                                         <Pencil size={16} />
                                                     </button>
                                                     <button 
                                                         onClick={() => handleDelete(m.id, m.name)} 
-                                                        className="p-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg transition-all border border-red-200 shadow-sm"
-                                                        title="Hapus Data"
+                                                        className="p-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg border border-red-200"
                                                     >
                                                         <Trash2 size={16} />
                                                     </button>
@@ -389,7 +363,6 @@ export default function MuridPage() {
                 </div>
             </div>
 
-            {/* Render Modal */}
             <StudentModal
                 isOpen={isModalOpen}
                 onClose={() => setIsModalOpen(false)}
