@@ -134,7 +134,7 @@ async function getMySalaries(req, res) {
         const { data: mentor, error: mentorErr } = await supabase
             .from('mentors')
             .select('id, name')
-            .eq('id', authUserId) // Use direct ID match instead of user_id
+            .eq('user_id', authUserId) // ✅ PERBAIKAN: Gunakan user_id, bukan id
             .single()
 
         // ✅ SECURITY: Jika mentor tidak ditemukan, REJECT request

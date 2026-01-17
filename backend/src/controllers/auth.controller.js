@@ -54,17 +54,27 @@ async function register(req, res) {
         
         // 3. Simpan ke tabel 'mentors'
         if (normalizedRole === 'MENTOR') {
+            console.log("🔄 Menyimpan data mentor ke database...");
+            console.log("User ID:", user.id);
+            console.log("Username:", username);
+            console.log("Email:", email);
+            
             const { error: mentorError } = await supabase.from('mentors').insert([{
-                id: user.id,
+                user_id: user.id,  // ✅ PERBAIKAN: Gunakan user_id, bukan id
                 name: username,
                 email: email,
+                phone_number: '000000000000', // ✅ PERBAIKAN: Gunakan dummy phone number
                 subject: 'Umum', 
                 salary_per_session: 0, 
                 status: 'AKTIF'
-                // phone_number tidak disertakan di sini
             }])
 
-            if (mentorError) throw new Error('Gagal menyimpan data mentor: ' + mentorError.message)
+            if (mentorError) {
+                console.error("❌ Gagal menyimpan data mentor:", mentorError);
+                throw new Error('Gagal menyimpan data mentor: ' + mentorError.message)
+            } else {
+                console.log("✅ Data mentor berhasil disimpan ke database");
+            }
         }
 
         if (userStore && userStore.saveRole) {
@@ -154,7 +164,8 @@ async function me(req, res) {
 // =================================================================
 async function registerInternal(req, res) {
     try {
-        const { username, email, birthday, password, role, subjects, expertise, salary_per_session } = req.body || {}
+        console.log("🔄 [registerInternal] Request body:", req.body);
+        const { username, email, birthday, password, role, subjects, expertise, salary_per_session, phone_number } = req.body || {}
         
         if (!username || !email || !password || !role) {
             return res.status(400).json({ error: 'Data wajib (username, email, password, role) belum lengkap.' })
@@ -201,22 +212,37 @@ async function registerInternal(req, res) {
 
         // 3. Simpan ke Tabel Mentors (Jika role MENTOR)
         if (normalizedRole === 'MENTOR') {
+            console.log("🔄 [registerInternal] Menyimpan data mentor...");
             const salary = salary_per_session ? parseInt(salary_per_session) : 0;
             const finalSubject = subjects || expertise || 'Umum';
+            const finalPhone = phone_number || '000000000000';
+
+            console.log("📋 [registerInternal] Data mentor:", {
+                user_id: user.id,
+                name: username,
+                email: email,
+                phone_number: finalPhone,
+                subject: finalSubject,
+                salary_per_session: salary
+            });
 
             const { error: mentorError } = await supabase
                 .from('mentors')
                 .upsert([{
-                    id: user.id,
+                    user_id: user.id,  // ✅ PERBAIKAN: Gunakan user_id, bukan id
                     name: username,
                     email: email,
+                    phone_number: finalPhone, // ✅ PERBAIKAN: Gunakan phone_number dari form atau fallback
                     subject: finalSubject, 
                     salary_per_session: isNaN(salary) ? 0 : salary,
                     status: 'AKTIF'
                 }]);
             
             if (mentorError) {
-                console.error("❌ Gagal sync ke tabel mentors:", mentorError);
+                console.error("❌ [registerInternal] Gagal sync ke tabel mentors:", mentorError);
+                throw new Error('Gagal menyimpan data mentor: ' + mentorError.message)
+            } else {
+                console.log("✅ [registerInternal] Data mentor berhasil disimpan");
             }
         }
 

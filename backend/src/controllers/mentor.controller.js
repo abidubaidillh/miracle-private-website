@@ -56,7 +56,7 @@ const getMyProfile = async (req, res) => {
         const { data: mentor, error } = await supabase
             .from('mentors')
             .select('*')
-            .eq('id', userId)
+            .eq('user_id', userId)  // ✅ PERBAIKAN: Gunakan user_id, bukan id
             .single()
 
         if (error || !mentor) {

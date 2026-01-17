@@ -1,6 +1,6 @@
 // frontend/lib/auth.ts
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
 export interface AuthObject {
   user: {
@@ -119,7 +119,7 @@ export function setAuthToken(token: string, user: any) {
 export async function logoutUser() {
   try {
     // Panggil endpoint logout di server (opsional, best practice untuk invalidate token)
-    await fetch(`${API_URL}/auth/logout`, { 
+    await fetch(`${API_URL}/api/auth/logout`, { 
         method: 'POST' 
     }).catch((err) => console.warn("Logout server error (ignored):", err));
     
