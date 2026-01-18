@@ -17,6 +17,7 @@ const getPayments = async (req, res) => {
                 method,
                 notes,
                 payment_date,
+                created_at,
                 proof_image,
                 students!inner (
                     name, 
