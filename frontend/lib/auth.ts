@@ -22,6 +22,10 @@ export interface AuthObject {
 // 1. HELPER COOKIE (Low Level)
 // ============================================================================
 
+/**
+ * Mengambil data Auth dari Cookie
+ * Digunakan baik oleh Client-side maupun logic internal lib ini
+ */
 export function getAuthCookie(): AuthObject | null {
   if (typeof document === 'undefined') return null;
   
@@ -33,29 +37,51 @@ export function getAuthCookie(): AuthObject | null {
 
   try {
     const value = cookie.split('=')[1];
-    return JSON.parse(decodeURIComponent(value)) as AuthObject;
+    const decodedValue = decodeURIComponent(value);
+    
+    // Pastikan string adalah JSON yang valid
+    if (decodedValue.startsWith('{')) {
+        return JSON.parse(decodedValue) as AuthObject;
+    }
+    return null;
   } catch (e) {
-    console.error("Gagal parse auth cookie", e);
+    console.error("Gagal parse auth cookie:", e);
     return null;
   }
 }
 
+/**
+ * Menyimpan data Auth ke Cookie
+ * Path=/ sangat penting agar cookie bisa dibaca di semua sub-halaman
+ */
 export function saveAuth(authObj: AuthObject) {
   if (typeof document === 'undefined') return;
 
-  // Fallback nama jika kosong
+  // Fallback nama jika kosong agar UI tidak berlubang
   if (authObj.user && !authObj.user.name) {
     authObj.user.name = authObj.user.email.split('@')[0];
   }
 
   const val = encodeURIComponent(JSON.stringify(authObj));
-  // Simpan cookie selama 1 hari (86400 detik)
-  document.cookie = `auth=${val}; path=/; max-age=86400; SameSite=Lax`;
+  
+  // Set Cookie dengan durasi 1 hari (86400 detik)
+  // Secure: hanya kirim lewat HTTPS (aktif jika di production)
+  // SameSite=Lax: perlindungan CSRF standar
+  const isProd = process.env.NODE_ENV === 'production';
+  document.cookie = `auth=${val}; path=/; max-age=86400; SameSite=Lax${isProd ? '; Secure' : ''}`;
+  
+  // Sync ke localStorage sebagai backup (optional, untuk persistensi client-side ekstra)
+  localStorage.setItem('user_role', authObj.user.role.toUpperCase());
 }
 
+/**
+ * Menghapus data Auth dari Cookie
+ */
 export function clearAuth() {
   if (typeof document === 'undefined') return;
+  // Menghapus cookie dengan mengeset max-age ke 0
   document.cookie = `auth=; path=/; max-age=0; SameSite=Lax`;
+  localStorage.removeItem('user_role');
 }
 
 // ============================================================================
@@ -63,16 +89,15 @@ export function clearAuth() {
 // ============================================================================
 
 /**
- * ✅ Mengambil Access Token untuk Authorization Header (Bearer)
+ * Mengambil Access Token untuk Authorization Header (Bearer)
  */
 export function getAuthToken(): string | null {
   const auth = getAuthCookie();
-  // Cek struktur session supabase atau struktur custom
   return auth?.session?.access_token || null;
 }
 
 /**
- * ✅ Mengambil Objek User yang sedang login
+ * Mengambil Objek User yang sedang login
  */
 export function getCurrentUser() {
   const auth = getAuthCookie();
@@ -80,8 +105,7 @@ export function getCurrentUser() {
 }
 
 /**
- * ✅ Mengambil Role User (Dinormalisasi ke Uppercase)
- * Penting untuk Sidebar agar konsisten (MENTOR vs mentor)
+ * Mengambil Role User (Dinormalisasi ke Uppercase)
  */
 export function getUserRole(): string | null {
   const user = getCurrentUser();
@@ -90,7 +114,7 @@ export function getUserRole(): string | null {
 }
 
 /**
- * ✅ Cek apakah user sedang login
+ * Cek apakah user sedang login berdasarkan keberadaan token
  */
 export function isAuthenticated(): boolean {
   const token = getAuthToken();
@@ -98,15 +122,14 @@ export function isAuthenticated(): boolean {
 }
 
 /**
- * ✅ Helper Kompatibilitas untuk Login Page
- * Digunakan untuk menyimpan token & user sekaligus dengan format standar
+ * Helper Kompatibilitas untuk Login Page
  */
 export function setAuthToken(token: string, user: any) {
     const authObj: AuthObject = {
         user: user,
         session: {
             access_token: token,
-            refresh_token: '', // Opsional jika backend tidak kirim refresh token
+            refresh_token: '', 
         }
     };
     saveAuth(authObj);
@@ -116,19 +139,26 @@ export function setAuthToken(token: string, user: any) {
 // 3. LOGOUT SYSTEM
 // ============================================================================
 
+/**
+ * Fungsi Logout Lengkap (Server Invalidation + Client Cleanup)
+ */
 export async function logoutUser() {
   try {
-    // Panggil endpoint logout di server (opsional, best practice untuk invalidate token)
-    await fetch(`${API_URL}/api/auth/logout`, { 
-        method: 'POST' 
-    }).catch((err) => console.warn("Logout server error (ignored):", err));
+    // 1. Invalidate di Backend (Opsional)
+    const token = getAuthToken();
+    if (token) {
+        await fetch(`${API_URL}/api/auth/logout`, { 
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` }
+        }).catch((err) => console.warn("Logout server error (ignored):", err));
+    }
     
-    // Hapus cookie di browser (Wajib)
+    // 2. Hapus Jejak di Browser
     clearAuth();
     
-    // Hapus local storage lain jika ada (misal data user_data lama)
+    // 3. Hapus data sisa di localStorage jika ada
     if (typeof window !== 'undefined') {
-        localStorage.removeItem('user_data'); 
+        localStorage.clear(); 
     }
     
     return true;

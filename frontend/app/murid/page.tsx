@@ -2,188 +2,23 @@
 
 import React, { useState, useEffect } from 'react'
 import DashboardLayout from '@/components/DashboardLayout'
-import { 
-    Search, UserPlus, Pencil, Trash2, X, Save, 
-    Users, CheckCircle, XCircle, User, MapPin, Smile, School
-} from 'lucide-react'
+import { Search, UserPlus, Pencil, Trash2, Users, CheckCircle, XCircle, MapPin, School } from 'lucide-react'
 import { getStudents, createStudent, updateStudent, deleteStudent, Student } from '@/lib/studentActions'
 import { useLoading } from '@/context/LoadingContext'
 import { useUser } from '@/context/UserContext'
+import { StatCard } from '@/components/Dashboard/StatCard'
+import { StudentModal } from '@/components/Murid/StudentModal'
 
-// =============================================================================
-// KOMPONEN: STAT CARD
-// =============================================================================
-const StatCard = ({ icon: Icon, count, label, colorClass, iconColor }: any) => (
-    <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 flex items-center gap-4 transition-transform hover:scale-[1.02]">
-        <div className={`p-3 rounded-full ${colorClass} ${iconColor}`}>
-            <Icon size={24} />
-        </div>
-        <div>
-            <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">{label}</p>
-            <h3 className="text-xl font-black text-gray-800">{count}</h3>
-        </div>
-    </div>
-)
-
-// =============================================================================
-// KOMPONEN: MODAL FORM
-// =============================================================================
-interface ModalProps {
-    isOpen: boolean
-    onClose: () => void
-    onSubmit: (data: any) => void
-    initialData: Student | null
-}
-
-function StudentModal({ isOpen, onClose, onSubmit, initialData }: ModalProps) {
-    const [formData, setFormData] = useState({
-        name: '',
-        age: '',
-        school_origin: '',
-        address: '',
-        parent_name: '',
-        parent_phone: '',
-        status: 'AKTIF'
-    })
-
-    useEffect(() => {
-        if (initialData) {
-            setFormData({
-                name: initialData.name,
-                age: initialData.age.toString(),
-                school_origin: initialData.school_origin || '', // <--- UBAH
-                address: initialData.address || '',
-                parent_name: initialData.parent_name || '',
-                parent_phone: initialData.parent_phone || '',
-                status: initialData.status
-            })
-        } else {
-            setFormData({ name: '', age: '', school_origin: '', address: '', parent_name: '', parent_phone: '', status: 'AKTIF' })
-        }
-    }, [initialData, isOpen])
-
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault()
-        onSubmit(formData)
-    }
-
-    if (!isOpen) return null
-
-    return (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 backdrop-blur-sm transition-opacity px-4">
-            <div className="bg-white rounded-xl w-full max-w-lg shadow-2xl animate-fade-in max-h-[90vh] overflow-y-auto flex flex-col">
-                
-                <div className="flex justify-between items-center p-6 border-b sticky top-0 bg-white z-10">
-                    <div>
-                        <h2 className="font-bold text-xl text-gray-800">
-                            {initialData ? 'Edit Data Murid' : 'Tambah Murid Baru'}
-                        </h2>
-                        <p className="text-xs text-gray-500 mt-1">Pastikan data yang diisi valid.</p>
-                    </div>
-                    <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition text-gray-400 hover:text-red-500">
-                        <X size={20} />
-                    </button>
-                </div>
-
-                <form onSubmit={handleSubmit} className="p-6 space-y-5">
-                    <div className="space-y-4">
-                        <h4 className="text-xs font-bold text-[#0077AF] uppercase tracking-wider flex items-center gap-2 border-b pb-2">
-                            <Smile size={14}/> Data Pribadi
-                        </h4>
-                        <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-1">Nama Lengkap <span className="text-red-500">*</span></label>
-                            <input required type="text" placeholder="Nama siswa" 
-                                className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-[#0077AF] outline-none transition"
-                                value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} 
-                            />
-                        </div>
-                        
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-1">Usia (Tahun)</label>
-                                <input required type="number" placeholder="Contoh: 12"
-                                    className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-[#0077AF] outline-none transition"
-                                    value={formData.age} onChange={e => setFormData({...formData, age: e.target.value})} 
-                                />
-                            </div>
-                            <div>
-                                {/* UBAH: Input Asal Sekolah */}
-                                <label className="block text-sm font-semibold text-gray-700 mb-1">Asal Sekolah</label>
-                                <input required type="text" placeholder="SDN/SMP..."
-                                    className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-[#0077AF] outline-none transition"
-                                    value={formData.school_origin} onChange={e => setFormData({...formData, school_origin: e.target.value})} 
-                                />
-                            </div>
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-1">Alamat Domisili</label>
-                            <textarea rows={2} placeholder="Alamat lengkap..."
-                                className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-[#0077AF] outline-none transition resize-none"
-                                value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} 
-                            />
-                        </div>
-                    </div>
-                    
-                    <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 space-y-4">
-                        <h4 className="text-xs font-bold text-[#0077AF] uppercase tracking-wider flex items-center gap-2">
-                            <User size={14}/> Data Orang Tua / Wali
-                        </h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-xs font-semibold text-gray-600 mb-1">Nama Orang Tua</label>
-                                <input required type="text" placeholder="Nama ortu"
-                                    className="w-full border border-blue-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#0077AF] outline-none bg-white"
-                                    value={formData.parent_name} onChange={e => setFormData({...formData, parent_name: e.target.value})} 
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-semibold text-gray-600 mb-1">No HP Ortu (WA)</label>
-                                <input required type="text" placeholder="08..."
-                                    className="w-full border border-blue-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#0077AF] outline-none bg-white"
-                                    value={formData.parent_phone} onChange={e => setFormData({...formData, parent_phone: e.target.value})} 
-                                />
-                            </div>
-                        </div>
-                    </div>
-
-                    <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-1">Status Keaktifan</label>
-                        <select 
-                            className="w-full border border-gray-300 rounded-lg px-4 py-2 bg-white focus:ring-2 focus:ring-[#0077AF] outline-none transition"
-                            value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})}
-                        >
-                            <option value="AKTIF">✅ Aktif</option>
-                            <option value="NON-AKTIF">❌ Tidak Aktif</option>
-                        </select>
-                    </div>
-
-                    <div className="pt-2">
-                        <button type="submit" className="w-full bg-[#0077AF] hover:bg-[#006699] text-white py-3 rounded-lg font-bold shadow-md transition-all flex justify-center items-center gap-2 active:scale-95">
-                            <Save size={18} /> Simpan Data Murid
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    )
-}
-
-// =============================================================================
-// HALAMAN UTAMA
-// =============================================================================
 export default function MuridPage() {
     const { withLoading } = useLoading()
     const { user } = useUser()
-    
     const [searchQuery, setSearchQuery] = useState('')
     const [students, setStudents] = useState<Student[]>([])
     const [stats, setStats] = useState({ active: 0, inactive: 0 })
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [editingStudent, setEditingStudent] = useState<Student | null>(null)
 
-    const role = user?.role || ''
-    const canEdit = ['OWNER', 'ADMIN'].includes(role)
+    const canEdit = ['OWNER', 'ADMIN'].includes(user?.role || '')
 
     const fetchStudents = async () => {
         await withLoading(async () => {
@@ -191,184 +26,112 @@ export default function MuridPage() {
                 const result = await getStudents(searchQuery)
                 setStudents(result.students || [])
                 setStats(result.stats || { active: 0, inactive: 0 })
-            } catch (err) {
-                console.error("Fetch Error:", err);
-            }
+            } catch (err) { console.error(err) }
         })
     }
 
     useEffect(() => {
-        const timer = setTimeout(() => {
-            fetchStudents()
-        }, 300)
+        const timer = setTimeout(fetchStudents, 300)
         return () => clearTimeout(timer)
     }, [searchQuery])
 
     const handleFormSubmit = async (formData: any) => {
         await withLoading(async () => {
             try {
-                if (editingStudent) {
-                    await updateStudent(editingStudent.id, formData)
-                } else {
-                    await createStudent(formData)
-                }
+                if (editingStudent) await updateStudent(editingStudent.id, formData)
+                else await createStudent(formData)
                 setIsModalOpen(false)
                 setEditingStudent(null)
                 fetchStudents() 
-            } catch (err: any) {
-                alert("Gagal menyimpan data: " + err.message)
-            }
+            } catch (err: any) { alert(err.message) }
         })
     }
 
     const handleDelete = async (id: string, name: string) => {
-        if (!confirm(`Yakin ingin menghapus data murid: ${name}?`)) return
-
+        if (!confirm(`Hapus murid: ${name}?`)) return
         await withLoading(async () => {
             try {
                 await deleteStudent(id)
                 fetchStudents()
-            } catch (error) {
-                alert("Gagal menghapus data murid")
-            }
+            } catch (error) { alert("Gagal hapus") }
         })
     }
 
     return (
         <DashboardLayout title="Data Murid">
-            
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-                <StatCard 
-                    icon={Users} 
-                    label="Total Murid" 
-                    count={students.length} 
-                    colorClass="bg-blue-100" iconColor="text-[#0077AF]" 
-                />
-                <StatCard 
-                    icon={CheckCircle} 
-                    label="Murid Aktif" 
-                    count={stats.active} 
-                    colorClass="bg-green-100" iconColor="text-green-600" 
-                />
-                <StatCard 
-                    icon={XCircle} 
-                    label="Tidak Aktif" 
-                    count={stats.inactive} 
-                    colorClass="bg-red-100" iconColor="text-red-600" 
-                />
+                <StatCard icon={Users} label="Total Murid" count={students.length} colorClass="bg-blue-100" iconColor="text-[#0077AF]" />
+                <StatCard icon={CheckCircle} label="Murid Aktif" count={stats.active} colorClass="bg-green-100" iconColor="text-green-600" />
+                <StatCard icon={XCircle} label="Tidak Aktif" count={stats.inactive} colorClass="bg-red-100" iconColor="text-red-600" />
             </div>
 
             <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
-                <div className="relative w-full md:w-96 group">
-                    <input
-                        type="text"
-                        placeholder="Cari nama, asal sekolah, atau orang tua..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0077AF] shadow-sm transition-all group-hover:border-gray-300"
-                    />
-                    <Search className="absolute left-3 top-2.5 text-gray-400 group-hover:text-[#0077AF] transition-colors" size={20} />
+                <div className="relative w-full md:w-96">
+                    <input type="text" placeholder="Cari murid..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2.5 bg-white border rounded-lg focus:ring-2 focus:ring-[#0077AF] outline-none" />
+                    <Search className="absolute left-3 top-2.5 text-gray-400" size={20} />
                 </div>
-
                 {canEdit && (
-                    <button
-                        onClick={() => { setEditingStudent(null); setIsModalOpen(true); }}
-                        className="flex items-center px-6 py-2.5 bg-[#0077AF] text-white rounded-lg font-bold text-sm hover:bg-[#006699] transition shadow-md w-full md:w-auto justify-center gap-2"
-                    >
+                    <button onClick={() => { setEditingStudent(null); setIsModalOpen(true); }}
+                        className="flex items-center px-6 py-2.5 bg-[#0077AF] text-white rounded-lg font-bold gap-2 shadow-md">
                         <UserPlus size={18} /> Tambah Murid
                     </button>
                 )}
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
                 <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                        <thead className="bg-gray-50 text-gray-700 border-b border-gray-200">
+                    <table className="w-full text-left">
+                        <thead className="bg-gray-50 text-gray-700 border-b">
                             <tr>
-                                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider">Nama & Asal Sekolah</th>
-                                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-center">Usia</th>
-                                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider">Data Orang Tua</th>
-                                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-center">Status</th>
-                                {canEdit && <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-center">Aksi</th>}
+                                <th className="px-6 py-4 text-xs font-bold uppercase">Nama & Sekolah</th>
+                                <th className="px-6 py-4 text-xs font-bold uppercase text-center">Usia</th>
+                                <th className="px-6 py-4 text-xs font-bold uppercase">Orang Tua</th>
+                                <th className="px-6 py-4 text-xs font-bold uppercase text-center">Status</th>
+                                {canEdit && <th className="px-6 py-4 text-xs font-bold uppercase text-center">Aksi</th>}
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-100">
-                            {students.length === 0 ? (
-                                <tr>
-                                    <td colSpan={canEdit ? 5 : 4} className="p-12 text-center text-gray-400 italic">
-                                        Data tidak ditemukan atau belum ada murid terdaftar.
+                        <tbody className="divide-y">
+                            {students.map((m) => (
+                                <tr key={m.id} className="hover:bg-blue-50/30 transition-colors">
+                                    <td className="px-6 py-4">
+                                        <div className="font-bold text-gray-800">{m.name}</div>
+                                        <div className="flex items-center gap-1 text-xs text-[#0077AF] mt-1">
+                                            <School size={10} /> {m.school_origin || '-'}
+                                        </div>
                                     </td>
-                                </tr>
-                            ) : (
-                                students.map((m) => (
-                                    <tr key={m.id} className="hover:bg-blue-50/30 transition-colors group">
-                                        <td className="px-6 py-4">
-                                            <div className="font-bold text-gray-800">{m.name}</div>
-                                            {/* UBAH: Tampilan Asal Sekolah di Tabel */}
-                                            <div className="flex items-center gap-1 text-xs text-[#0077AF] mt-1 font-medium">
-                                                <School size={10} />
-                                                <span>{m.school_origin || 'Sekolah belum diisi'}</span>
-                                            </div>
-                                            {m.address && (
-                                                <div className="flex items-start gap-1 text-xs text-gray-400 mt-1 italic max-w-[200px] truncate">
-                                                    <MapPin size={10} className="mt-0.5 shrink-0" />
-                                                    {m.address}
-                                                </div>
-                                            )}
-                                        </td>
-                                        <td className="px-6 py-4 text-sm text-gray-600 text-center font-medium">
-                                            <span className="bg-gray-100 px-2 py-1 rounded text-xs font-bold text-gray-700 border border-gray-200">
-                                                {m.age} Thn
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <p className="text-sm font-semibold text-gray-700">{m.parent_name}</p>
-                                            <div className="flex items-center gap-2 mt-1">
-                                                <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-bold uppercase border border-green-200">WA</span>
-                                                <span className="text-xs text-gray-600 font-mono">{m.parent_phone}</span>
-                                            </div>
-                                        </td>
+                                    <td className="px-6 py-4 text-center">
+                                        <span className="bg-gray-100 px-2 py-1 rounded text-xs font-bold">{m.age} Thn</span>
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        <p className="text-sm font-semibold">{m.parent_name}</p>
+                                        <p className="text-xs text-gray-500 font-mono">{m.parent_phone}</p>
+                                    </td>
+                                    <td className="px-6 py-4 text-center">
+                                        <span className={`px-3 py-1 rounded-full text-[10px] font-bold border ${m.status === 'AKTIF' ? 'bg-green-100 text-green-700 border-green-200' : 'bg-red-100 text-red-700 border-red-200'}`}>
+                                            {m.status}
+                                        </span>
+                                    </td>
+                                    {canEdit && (
                                         <td className="px-6 py-4 text-center">
-                                            <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide border ${
-                                                m.status === 'AKTIF' 
-                                                ? 'bg-green-100 text-green-700 border-green-200' 
-                                                : 'bg-red-100 text-red-700 border-red-200'
-                                            }`}>
-                                                {m.status}
-                                            </span>
+                                            <div className="flex justify-center gap-2">
+                                                <button onClick={() => { setEditingStudent(m); setIsModalOpen(true); }} className="p-2 bg-yellow-50 text-yellow-600 rounded-lg border border-yellow-200 hover:bg-yellow-100">
+                                                    <Pencil size={16} />
+                                                </button>
+                                                <button onClick={() => handleDelete(m.id, m.name)} className="p-2 bg-red-50 text-red-600 rounded-lg border border-red-200 hover:bg-red-100">
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            </div>
                                         </td>
-                                        {canEdit && (
-                                            <td className="px-6 py-4 text-center">
-                                                <div className="flex justify-center gap-2">
-                                                    <button 
-                                                        onClick={() => { setEditingStudent(m); setIsModalOpen(true); }} 
-                                                        className="p-2 bg-yellow-50 text-yellow-600 hover:bg-yellow-100 rounded-lg border border-yellow-200"
-                                                    >
-                                                        <Pencil size={16} />
-                                                    </button>
-                                                    <button 
-                                                        onClick={() => handleDelete(m.id, m.name)} 
-                                                        className="p-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg border border-red-200"
-                                                    >
-                                                        <Trash2 size={16} />
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        )}
-                                    </tr>
-                                ))
-                            )}
+                                    )}
+                                </tr>
+                            ))}
                         </tbody>
                     </table>
                 </div>
             </div>
 
-            <StudentModal
-                isOpen={isModalOpen}
-                onClose={() => setIsModalOpen(false)}
-                onSubmit={handleFormSubmit}
-                initialData={editingStudent}
-            />
+            <StudentModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSubmit={handleFormSubmit} initialData={editingStudent} />
         </DashboardLayout>
     )
 }
