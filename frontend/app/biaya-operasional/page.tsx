@@ -8,18 +8,22 @@ import Swal from 'sweetalert2'
 import { 
   Plus, 
   Search, 
-  Filter, 
   Edit, 
   Trash2, 
-  Calendar,
   DollarSign,
   Tag,
-  Clock,
   TrendingUp,
   AlertCircle
 } from 'lucide-react'
 
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'
+// Import service yang sudah menggunakan fetchWithAuth
+import { 
+  getOperasionalData, 
+  getKategoriOperasional, 
+  getOperasionalSummary,
+  API_URL_BASE // Pastikan ini diekspor dari financeActions atau auth
+} from '@/lib/financeActions'
+import { fetchWithAuth } from '@/lib/apiClient'
 
 interface Kategori {
   id: string
@@ -72,10 +76,9 @@ export default function BiayaOperasionalPage() {
     deskripsi: ''
   })
 
-  // Check permissions
   const canEdit = user?.role === 'OWNER' || user?.role === 'BENDAHARA'
 
-  // Fetch data
+  // Fetch data menggunakan financeActions
   const fetchData = async () => {
     await withLoading(async () => {
       try {
@@ -86,32 +89,20 @@ export default function BiayaOperasionalPage() {
         if (filterTahun) params.append('tahun', filterTahun)
         
         const [operasionalRes, kategoriRes, summaryRes] = await Promise.all([
-          fetch(`${API}/api/operasional?${params.toString()}`, {
-            credentials: 'include'
-          }),
-          fetch(`${API}/api/operasional/kategori`, {
-            credentials: 'include'
-          }),
-          fetch(`${API}/api/operasional/summary`, {
-            credentials: 'include'
-          })
+          getOperasionalData(params.toString()),
+          getKategoriOperasional(),
+          getOperasionalSummary()
         ])
 
-        if (!operasionalRes.ok || !kategoriRes.ok || !summaryRes.ok) {
-          throw new Error('Gagal mengambil data')
-        }
-
-        const operasionalData = await operasionalRes.json()
-        const kategoriData = await kategoriRes.json()
-        const summaryData = await summaryRes.json()
-
-        setOperasionalList(operasionalData.data || [])
-        setKategoriList(kategoriData.data || [])
-        setSummary(summaryData)
+        setOperasionalList(operasionalRes.data || [])
+        setKategoriList(kategoriRes.data || [])
+        setSummary(summaryRes)
 
       } catch (error: any) {
         console.error('Error fetching data:', error)
-        Swal.fire('Error', 'Gagal memuat data biaya operasional', 'error')
+        if (error.message !== 'SESSION_EXPIRED') {
+            Swal.fire('Error', 'Gagal memuat data biaya operasional', 'error')
+        }
       }
     })
   }
@@ -120,29 +111,20 @@ export default function BiayaOperasionalPage() {
     fetchData()
   }, [filterKategori, filterTipePeriode, filterBulan, filterTahun])
 
-  // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
-    if (!canEdit) {
-      Swal.fire('Akses Ditolak', 'Anda tidak memiliki izin untuk menambah/edit data', 'error')
-      return
-    }
+    if (!canEdit) return
 
     await withLoading(async () => {
       try {
         const url = editingItem 
-          ? `${API}/api/operasional/${editingItem.id}`
-          : `${API}/api/operasional`
+          ? `${API_URL_BASE}/operasional/${editingItem.id}`
+          : `${API_URL_BASE}/operasional`
         
         const method = editingItem ? 'PUT' : 'POST'
         
-        const response = await fetch(url, {
+        const response = await fetchWithAuth(url, {
           method,
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          credentials: 'include',
           body: JSON.stringify({
             ...formData,
             jumlah: parseFloat(formData.jumlah)
@@ -158,19 +140,16 @@ export default function BiayaOperasionalPage() {
         setShowModal(false)
         resetForm()
         fetchData()
-
       } catch (error: any) {
-        Swal.fire('Error', error.message, 'error')
+        if (error.message !== 'SESSION_EXPIRED') {
+            Swal.fire('Error', error.message, 'error')
+        }
       }
     })
   }
 
-  // Handle delete
   const handleDelete = async (id: string) => {
-    if (!canEdit) {
-      Swal.fire('Akses Ditolak', 'Anda tidak memiliki izin untuk menghapus data', 'error')
-      return
-    }
+    if (!canEdit) return
 
     const result = await Swal.fire({
       title: 'Konfirmasi Hapus',
@@ -178,40 +157,31 @@ export default function BiayaOperasionalPage() {
       icon: 'warning',
       showCancelButton: true,
       confirmButtonColor: '#d33',
-      cancelButtonColor: '#3085d6',
-      confirmButtonText: 'Ya, Hapus',
-      cancelButtonText: 'Batal'
+      confirmButtonText: 'Ya, Hapus'
     })
 
     if (result.isConfirmed) {
       await withLoading(async () => {
         try {
-          const response = await fetch(`${API}/api/operasional/${id}`, {
-            method: 'DELETE',
-            credentials: 'include'
+          const response = await fetchWithAuth(`${API_URL_BASE}/operasional/${id}`, {
+            method: 'DELETE'
           })
 
-          if (!response.ok) {
-            throw new Error('Gagal menghapus data')
-          }
+          if (!response.ok) throw new Error('Gagal menghapus data')
 
           Swal.fire('Berhasil', 'Data berhasil dihapus', 'success')
           fetchData()
-
         } catch (error: any) {
-          Swal.fire('Error', error.message, 'error')
+          if (error.message !== 'SESSION_EXPIRED') {
+            Swal.fire('Error', error.message, 'error')
+          }
         }
       })
     }
   }
 
-  // Handle edit
   const handleEdit = (item: OperasionalData) => {
-    if (!canEdit) {
-      Swal.fire('Akses Ditolak', 'Anda tidak memiliki izin untuk mengedit data', 'error')
-      return
-    }
-
+    if (!canEdit) return
     setEditingItem(item)
     setFormData({
       nama_pengeluaran: item.nama_pengeluaran,
@@ -224,7 +194,6 @@ export default function BiayaOperasionalPage() {
     setShowModal(true)
   }
 
-  // Reset form
   const resetForm = () => {
     setEditingItem(null)
     setFormData({
@@ -237,14 +206,12 @@ export default function BiayaOperasionalPage() {
     })
   }
 
-  // Filter data
   const filteredData = operasionalList.filter(item => {
-    const matchSearch = item.nama_pengeluaran.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                       item.kategori_operasional?.nama_kategori.toLowerCase().includes(searchTerm.toLowerCase())
-    return matchSearch
+    const searchLower = searchTerm.toLowerCase()
+    return item.nama_pengeluaran.toLowerCase().includes(searchLower) ||
+           item.kategori_operasional?.nama_kategori.toLowerCase().includes(searchLower)
   })
 
-  // Format currency
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('id-ID', {
       style: 'currency',
@@ -258,14 +225,14 @@ export default function BiayaOperasionalPage() {
       {/* Summary Cards */}
       {summary && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="bg-gradient-to-r from-red-500 to-red-600 p-6 rounded-xl text-white">
+          <div className="bg-gradient-to-r from-red-500 to-red-600 p-6 rounded-xl text-white shadow-md">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-red-100 text-sm font-medium">Total Bulan Ini</p>
                 <p className="text-2xl font-bold">{formatCurrency(summary.totalBulanIni)}</p>
                 <p className="text-red-100 text-xs mt-1">{summary.periode}</p>
               </div>
-              <TrendingUp size={32} className="text-red-200" />
+              <TrendingUp size={32} className="text-red-200 opacity-50" />
             </div>
           </div>
           
@@ -291,7 +258,7 @@ export default function BiayaOperasionalPage() {
                 <p className="text-2xl font-bold text-gray-800">{operasionalList.length}</p>
                 <p className="text-gray-500 text-xs mt-1">Entri biaya</p>
               </div>
-              <DollarSign size={32} className="text-gray-400" />
+              <DollarSign size={32} className="text-gray-400 opacity-50" />
             </div>
           </div>
         </div>
@@ -300,29 +267,25 @@ export default function BiayaOperasionalPage() {
       {/* Filters & Actions */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 mb-8">
         <div className="flex flex-wrap items-center gap-4 mb-4">
-          <div className="flex-1 min-w-64">
+          <div className="flex-1 min-w-[280px]">
             <div className="relative">
               <Search size={20} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
-                placeholder="Cari nama biaya atau kategori..."
+                placeholder="Cari biaya atau kategori..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0077AF] focus:border-transparent"
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0077AF] outline-none"
               />
             </div>
           </div>
           
           {canEdit && (
             <button
-              onClick={() => {
-                resetForm()
-                setShowModal(true)
-              }}
+              onClick={() => { resetForm(); setShowModal(true); }}
               className="bg-[#0077AF] text-white px-4 py-2 rounded-lg hover:bg-[#005a8a] transition-colors flex items-center gap-2"
             >
-              <Plus size={20} />
-              Tambah Biaya
+              <Plus size={20} /> Tambah Biaya
             </button>
           )}
         </div>
@@ -331,20 +294,16 @@ export default function BiayaOperasionalPage() {
           <select
             value={filterKategori}
             onChange={(e) => setFilterKategori(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0077AF]"
+            className="px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#0077AF]"
           >
             <option value="">Semua Kategori</option>
-            {kategoriList.map(kategori => (
-              <option key={kategori.id} value={kategori.id}>
-                {kategori.nama_kategori}
-              </option>
-            ))}
+            {kategoriList.map(k => <option key={k.id} value={k.id}>{k.nama_kategori}</option>)}
           </select>
 
           <select
             value={filterTipePeriode}
             onChange={(e) => setFilterTipePeriode(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0077AF]"
+            className="px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none"
           >
             <option value="">Semua Periode</option>
             <option value="HARIAN">Harian</option>
@@ -355,103 +314,71 @@ export default function BiayaOperasionalPage() {
           <select
             value={filterBulan}
             onChange={(e) => setFilterBulan(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0077AF]"
+            className="px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none"
           >
             <option value="">Semua Bulan</option>
             {Array.from({length: 12}, (_, i) => (
-              <option key={i+1} value={i+1}>
-                {new Date(0, i).toLocaleString('id-ID', {month: 'long'})}
-              </option>
+              <option key={i+1} value={i+1}>{new Date(0, i).toLocaleString('id-ID', {month: 'long'})}</option>
             ))}
           </select>
 
           <select
             value={filterTahun}
             onChange={(e) => setFilterTahun(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0077AF]"
+            className="px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none"
           >
             {Array.from({length: 5}, (_, i) => {
               const year = new Date().getFullYear() - 2 + i
-              return (
-                <option key={year} value={year}>
-                  {year}
-                </option>
-              )
+              return <option key={year} value={year}>{year}</option>
             })}
           </select>
         </div>
       </div>
 
-      {/* Data Table */}
+      {/* Table */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full">
+          <table className="w-full text-left">
             <thead className="bg-[#0077AF] text-white">
               <tr>
-                <th className="px-6 py-4 text-left text-sm font-semibold">Tanggal</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold">Nama Biaya</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold">Kategori</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold">Periode</th>
+                <th className="px-6 py-4 text-sm font-semibold">Tanggal</th>
+                <th className="px-6 py-4 text-sm font-semibold">Nama Biaya</th>
+                <th className="px-6 py-4 text-sm font-semibold">Kategori</th>
+                <th className="px-6 py-4 text-sm font-semibold">Periode</th>
                 <th className="px-6 py-4 text-right text-sm font-semibold">Jumlah</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold">Deskripsi</th>
-                {canEdit && (
-                  <th className="px-6 py-4 text-center text-sm font-semibold">Aksi</th>
-                )}
+                <th className="px-6 py-4 text-sm font-semibold">Deskripsi</th>
+                {canEdit && <th className="px-6 py-4 text-center text-sm font-semibold">Aksi</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
               {filteredData.length === 0 ? (
                 <tr>
-                  <td colSpan={canEdit ? 7 : 6} className="px-6 py-12 text-center text-gray-500">
-                    <AlertCircle size={48} className="mx-auto mb-4 text-gray-300" />
-                    <p className="font-medium">Tidak ada data biaya operasional</p>
-                    <p className="text-sm mt-1">Silakan tambah data baru atau ubah filter</p>
+                  <td colSpan={canEdit ? 7 : 6} className="px-6 py-12 text-center text-gray-400">
+                    <AlertCircle size={40} className="mx-auto mb-2 opacity-20" />
+                    Data tidak ditemukan
                   </td>
                 </tr>
               ) : (
                 filteredData.map((item) => (
-                  <tr key={item.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 text-sm text-gray-900">
-                      {new Date(item.tanggal).toLocaleDateString('id-ID')}
-                    </td>
-                    <td className="px-6 py-4 text-sm font-medium text-gray-900">
-                      {item.nama_pengeluaran}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      {item.kategori_operasional?.nama_kategori || '-'}
-                    </td>
+                  <tr key={item.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-6 py-4 text-sm">{new Date(item.tanggal).toLocaleDateString('id-ID')}</td>
+                    <td className="px-6 py-4 text-sm font-medium text-gray-900">{item.nama_pengeluaran}</td>
+                    <td className="px-6 py-4 text-sm text-gray-600">{item.kategori_operasional?.nama_kategori || '-'}</td>
                     <td className="px-6 py-4 text-sm">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        item.tipe_periode === 'HARIAN' ? 'bg-blue-100 text-blue-800' :
-                        item.tipe_periode === 'MINGGUAN' ? 'bg-green-100 text-green-800' :
-                        'bg-purple-100 text-purple-800'
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        item.tipe_periode === 'HARIAN' ? 'bg-blue-100 text-blue-700' :
+                        item.tipe_periode === 'MINGGUAN' ? 'bg-green-100 text-green-700' : 'bg-purple-100 text-purple-700'
                       }`}>
                         {item.tipe_periode}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-sm font-semibold text-right text-red-600">
-                      {formatCurrency(item.jumlah)}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      {item.deskripsi || '-'}
-                    </td>
+                    <td className="px-6 py-4 text-sm font-bold text-right text-red-600">{formatCurrency(item.jumlah)}</td>
+                    <td className="px-6 py-4 text-sm text-gray-500 italic">{item.deskripsi || '-'}</td>
                     {canEdit && (
-                      <td className="px-6 py-4 text-center">
-                        <div className="flex justify-center gap-2">
-                          <button
-                            onClick={() => handleEdit(item)}
-                            className="text-blue-600 hover:text-blue-800 p-1"
-                            title="Edit"
-                          >
-                            <Edit size={16} />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(item.id)}
-                            className="text-red-600 hover:text-red-800 p-1"
-                            title="Hapus"
-                          >
-                            <Trash2 size={16} />
-                          </button>
+                      <td className="px-6 py-4">
+                        <div className="flex justify-center gap-3">
+                          <button onClick={() => handleEdit(item)} className="text-blue-500 hover:text-blue-700"><Edit size={16} /></button>
+                          <button onClick={() => handleDelete(item.id)} className="text-red-500 hover:text-red-700"><Trash2 size={16} /></button>
                         </div>
                       </td>
                     )}
@@ -465,118 +392,92 @@ export default function BiayaOperasionalPage() {
 
       {/* Modal Form */}
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden">
             <div className="p-6">
-              <h3 className="text-lg font-semibold mb-4">
-                {editingItem ? 'Edit Biaya Operasional' : 'Tambah Biaya Operasional'}
+              <h3 className="text-xl font-bold text-gray-800 mb-6 border-b pb-2">
+                {editingItem ? 'Edit Biaya' : 'Tambah Biaya Baru'}
               </h3>
               
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Nama Pengeluaran *
-                  </label>
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Nama Pengeluaran *</label>
                   <input
-                    type="text"
-                    required
+                    type="text" required
                     value={formData.nama_pengeluaran}
                     onChange={(e) => setFormData({...formData, nama_pengeluaran: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0077AF]"
-                    placeholder="Contoh: Listrik, Internet, ATK"
+                    className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#0077AF] outline-none"
                   />
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Kategori *
-                  </label>
-                  <select
-                    required
-                    value={formData.kategori_id}
-                    onChange={(e) => setFormData({...formData, kategori_id: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0077AF]"
-                  >
-                    <option value="">Pilih Kategori</option>
-                    {kategoriList.map(kategori => (
-                      <option key={kategori.id} value={kategori.id}>
-                        {kategori.nama_kategori}
-                      </option>
-                    ))}
-                  </select>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Kategori *</label>
+                    <select
+                      required value={formData.kategori_id}
+                      onChange={(e) => setFormData({...formData, kategori_id: e.target.value})}
+                      className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl outline-none"
+                    >
+                      <option value="">Pilih...</option>
+                      {kategoriList.map(k => <option key={k.id} value={k.id}>{k.nama_kategori}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Periode *</label>
+                    <select
+                      required value={formData.tipe_periode}
+                      onChange={(e) => setFormData({...formData, tipe_periode: e.target.value as any})}
+                      className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl outline-none"
+                    >
+                      <option value="HARIAN">Harian</option>
+                      <option value="MINGGUAN">Mingguan</option>
+                      <option value="BULANAN">Bulanan</option>
+                    </select>
+                  </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Jumlah (Rp) *
-                  </label>
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Jumlah (Rp) *</label>
                   <input
-                    type="number"
-                    required
-                    min="0"
-                    step="1000"
+                    type="number" required min="0"
                     value={formData.jumlah}
                     onChange={(e) => setFormData({...formData, jumlah: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0077AF]"
-                    placeholder="0"
+                    className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl font-bold text-[#0077AF]"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Tipe Periode *
-                  </label>
-                  <select
-                    required
-                    value={formData.tipe_periode}
-                    onChange={(e) => setFormData({...formData, tipe_periode: e.target.value as any})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0077AF]"
-                  >
-                    <option value="HARIAN">Harian</option>
-                    <option value="MINGGUAN">Mingguan</option>
-                    <option value="BULANAN">Bulanan</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Tanggal *
-                  </label>
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Tanggal *</label>
                   <input
-                    type="date"
-                    required
+                    type="date" required
                     value={formData.tanggal}
                     onChange={(e) => setFormData({...formData, tanggal: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0077AF]"
+                    className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Deskripsi
-                  </label>
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Deskripsi</label>
                   <textarea
                     value={formData.deskripsi}
                     onChange={(e) => setFormData({...formData, deskripsi: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0077AF]"
-                    rows={3}
-                    placeholder="Keterangan tambahan (opsional)"
+                    className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl resize-none"
+                    rows={2}
                   />
                 </div>
 
                 <div className="flex gap-3 pt-4">
                   <button
-                    type="button"
-                    onClick={() => setShowModal(false)}
-                    className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                    type="button" onClick={() => setShowModal(false)}
+                    className="flex-1 py-3 text-gray-500 font-bold hover:bg-gray-100 rounded-xl transition-colors"
                   >
                     Batal
                   </button>
                   <button
                     type="submit"
-                    className="flex-1 px-4 py-2 bg-[#0077AF] text-white rounded-lg hover:bg-[#005a8a]"
+                    className="flex-1 py-3 bg-[#0077AF] text-white font-bold rounded-xl shadow-lg shadow-blue-200 hover:bg-[#005a8a] transition-all"
                   >
-                    {editingItem ? 'Update' : 'Simpan'}
+                    {editingItem ? 'Simpan Perubahan' : 'Simpan Data'}
                   </button>
                 </div>
               </form>

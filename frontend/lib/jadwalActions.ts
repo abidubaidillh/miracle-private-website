@@ -1,9 +1,11 @@
 // frontend/lib/jadwalActions.ts
 import { fetchWithAuth } from './apiClient';
+import { API_URL } from './auth'; // Ambil URL dinamis dari auth.ts
 
-const API_BASE_URL = 'http://localhost:4000/api/schedules';
-const API_STUDENTS_URL = 'http://localhost:4000/api/students';
-const API_MENTORS_URL = 'http://localhost:4000/api/mentors';
+// ✅ Gunakan API_URL dari config, jangan hardcode localhost lagi
+const API_BASE_URL = `${API_URL}/api/schedules`;
+const API_STUDENTS_URL = `${API_URL}/api/students`;
+const API_MENTORS_URL = `${API_URL}/api/mentors`;
 
 // Tipe Data
 export interface Schedule {
@@ -22,10 +24,9 @@ export async function getSchedules(filters: any = {}) {
     if (filters.date) params.append('date', filters.date);
     if (filters.mentor_id) params.append('mentor_id', filters.mentor_id);
     
-    // ✅ PENGGUNAAN BARU: fetchWithAuth
+    // Gunakan template literal yang benar
     const res = await fetchWithAuth(`${API_BASE_URL}?${params}`);
 
-    // Tidak perlu cek res.status === 401 lagi di sini
     if (!res.ok) throw new Error('Gagal ambil jadwal');
     return res.json();
 }
@@ -33,12 +34,14 @@ export async function getSchedules(filters: any = {}) {
 // 2. Helper & CRUD lainnya
 export async function getStudentsList() {
     const res = await fetchWithAuth(API_STUDENTS_URL);
+    if (!res.ok) throw new Error('Gagal ambil daftar murid');
     const data = await res.json();
     return data.students || [];
 }
 
 export async function getMentorsList() {
     const res = await fetchWithAuth(API_MENTORS_URL);
+    if (!res.ok) throw new Error('Gagal ambil daftar mentor');
     const data = await res.json();
     return data.mentors || [];
 }
@@ -64,7 +67,6 @@ export async function createSchedule(data: any) {
         try {
             const err = await res.json();
             console.error('Backend error response:', err);
-            // Coba parse error dari validasi Joi
             if (err.errors && Array.isArray(err.errors)) {
                 errorMessage = err.errors.map((e: any) => {
                     const key = Object.keys(e)[0];
