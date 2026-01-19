@@ -49,6 +49,8 @@ const getAllMentor = async (req, res) => {
 // B. GET MY PROFILE - Khusus Dashboard Mentor (/me)
 // =================================================================
 const getMyProfile = async (req, res) => {
+    console.log(`[DEBUG MENTOR] getMyProfile called for user:`, req.user);
+    
     try {
         const userId = req.user.id 
 
@@ -59,9 +61,29 @@ const getMyProfile = async (req, res) => {
             .eq('user_id', userId)  // ✅ PERBAIKAN: Gunakan user_id, bukan id
             .single()
 
+        console.log(`[DEBUG MENTOR] Mentor data:`, mentor);
+        console.log(`[DEBUG MENTOR] Mentor error:`, error);
+
         if (error || !mentor) {
             console.error("❌ [DEBUG] Data Mentor tidak ditemukan di tabel public.mentors untuk ID:", userId)
-            return res.status(404).json({ error: 'Profil mentor tidak ditemukan. ID Login tidak cocok dengan data Mentor.' })
+            
+            // Return basic profile info instead of 404
+            return res.status(200).json({
+                id: userId,
+                name: req.user.email?.split('@')[0] || 'Mentor',
+                email: req.user.email,
+                phone_number: '-',
+                subject: 'Belum diatur',
+                salary_per_session: 0,
+                status: 'AKTIF',
+                schedules: [],
+                stats: {
+                    total_sessions_this_month: 0,
+                    total_earnings_this_month: 0,
+                    total_students: 0
+                },
+                message: 'Profil mentor belum lengkap. Silakan hubungi administrator.'
+            })
         }
 
         // 2. 🔥 AMBIL SEMUA JADWAL (MENGGUNAKAN start_time & end_time) 🔥
