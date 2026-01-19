@@ -52,7 +52,65 @@ app.use(cookieParser())
 // ==========================================================
 // 3. Health Check & Root
 // ==========================================================
-app.get('/api/health', (req, res) => {
+app.get('/api/health', async (req, res) => {
+    // TEMPORARY DEBUG: Check if debug parameter is present
+    if (req.query.debug_mentor) {
+        try {
+            const supabase = require('./config/supabase');
+            const mentor_auth_id = req.query.debug_mentor;
+            
+            // Step 1: Check mentor profile
+            const { data: mentorProfile, error: mentorError } = await supabase
+                .from('mentors')
+                .select('id, user_id, name, email')
+                .eq('user_id', mentor_auth_id)
+                .maybeSingle();
+            
+            // Step 2: Check schedules with profile ID
+            let schedules = [];
+            if (mentorProfile) {
+                const { data: scheduleData, error: scheduleError } = await supabase
+                    .from('schedules')
+                    .select(`
+                        *,
+                        mentors(id, name, user_id),
+                        students(id, name)
+                    `)
+                    .eq('mentor_id', mentorProfile.id)
+                    .eq('status', 'AKTIF');
+                    
+                schedules = scheduleData || [];
+            }
+            
+            // Step 3: Check schedules with auth ID directly
+            const { data: directSchedules, error: directError } = await supabase
+                .from('schedules')
+                .select(`
+                    *,
+                    mentors(id, name, user_id),
+                    students(id, name)
+                `)
+                .eq('mentor_id', mentor_auth_id)
+                .eq('status', 'AKTIF');
+            
+            return res.json({
+                debug: true,
+                mentor_auth_id,
+                mentorProfile,
+                mentorError,
+                schedules_with_profile_id: schedules,
+                schedules_with_auth_id: directSchedules || [],
+                directError
+            });
+            
+        } catch (error) {
+            return res.json({
+                debug: true,
+                error: error.message
+            });
+        }
+    }
+    
     res.json({ 
         status: 'ok', 
         serverTime: new Date().toISOString(),

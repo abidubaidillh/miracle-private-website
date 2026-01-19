@@ -1,244 +1,241 @@
-// backend/src/controllers/attendance.controller.js
 const supabase = require('../config/supabase')
 
-// 1. Ambil Data Jadwal + Status Absensi PER BULAN
+/**
+ * 1. Ambil Data Jadwal + Status Absensi PER BULAN
+ * Target: Frontend AttendanceTable
+ */
 async function getAttendanceDashboard(req, res) {
+    console.log(`[DEBUG] ===== ATTENDANCE DASHBOARD REQUEST =====`);
+    console.log(`[DEBUG] Request query:`, req.query);
+    console.log(`[DEBUG] Request user:`, req.user);
+    
     try {
-        const { month, year, mentor_id } = req.query
+        const { month, year, mentor_id } = req.query 
         
-        const curMonth = parseInt(month || new Date().getMonth() + 1)
-        const curYear = parseInt(year || new Date().getFullYear())
+        const curMonth = parseInt(month) || (new Date().getMonth() + 1)
+        const curYear = parseInt(year) || new Date().getFullYear()
 
-        // --- 1. Query Jadwal (Master Data) ---
+        console.log(`[Attendance] Fetching: Month ${curMonth}, Year ${curYear}, AuthUID ${mentor_id}`);
+
+        // --- STEP 1: Resolusi ID Mentor (Jembatan Auth ke Profil) ---
+        // Karena mentor_id yang dikirim frontend seringkali adalah user_id (auth), 
+        // kita cari id asli di tabel mentors untuk query relasi yang akurat.
+        let mentorProfileId = null;
+        if (mentor_id) {
+            // TEMPORARY DEBUG: Test dengan profile ID yang sudah kita ketahui
+            if (mentor_id === '7073f2f1-6f91-4d4b-b200-a713dfdfb054') {
+                console.log(`[DEBUG] This is mentor B - using known profile ID`);
+                mentorProfileId = '46038ba4-a294-45b0-b046-7a81c1fcd657';
+            } else {
+                const { data: profile } = await supabase
+                    .from('mentors')
+                    .select('id')
+                    .eq('user_id', mentor_id)
+                    .maybeSingle();
+
+                if (profile) mentorProfileId = profile.id;
+            }
+            
+            // DEBUG LOGGING
+            console.log(`[DEBUG] mentor_id from frontend: ${mentor_id}`);
+            console.log(`[DEBUG] mentorProfileId found: ${mentorProfileId}`);
+            console.log(`[DEBUG] Final filterId will be: ${mentorProfileId || mentor_id}`);
+        }
+
+        // --- STEP 2: Query Master Jadwal ---
+        // Simplified query without relations to avoid potential join issues
         let query = supabase
             .from('schedules')
-            .select(`
-                id, 
-                day_of_week, 
-                start_time, 
-                subject, 
-                planned_sessions,
-                mentors!inner(id, name),
-                students(name)
-            `)
+            .select('*')
+            .eq('status', 'AKTIF');
         
-        // Filter Mentor jika ada parameter mentor_id
         if (mentor_id) {
-            query = query.eq('mentors.id', mentor_id)
+            // Kita dukung filter menggunakan Profil UUID maupun Auth User ID
+            const filterId = mentorProfileId || mentor_id;
+            
+            // DEBUG LOGGING
+            console.log(`[DEBUG] Query filter applied: mentor_id = ${filterId}`);
+            
+            // Gunakan filter sederhana, prioritaskan mentorProfileId jika ada
+            query = query.eq('mentor_id', filterId);
         }
 
         const { data: schedules, error: errSch } = await query
+        
+        // DEBUG LOGGING
+        console.log(`[DEBUG] Schedules found: ${schedules ? schedules.length : 0}`);
+        if (schedules && schedules.length > 0) {
+            console.log(`[DEBUG] First schedule:`, schedules[0]);
+        }
+        if (errSch) {
+            console.log(`[DEBUG] Schedule query error:`, errSch);
+        }
+        
         if (errSch) throw errSch
 
-        // --- 2. Ambil data absensi ---
+        if (!schedules || schedules.length === 0) {
+            return res.json([]); // Kembalikan array kosong jika tidak ada jadwal
+        }
+
+        // --- STEP 3: Ambil Data Absensi Tercatat ---
+        const scheduleIds = schedules.map(s => s.id)
         const { data: attendanceData, error: errAtt } = await supabase
             .from('attendance')
-            .select('schedule_id, session_number, status, date, bukti_foto')
+            .select('*')
+            .in('schedule_id', scheduleIds)
             .eq('month', curMonth)
             .eq('year', curYear)
 
         if (errAtt) throw errAtt
 
-        // --- 3. Gabungkan Data ---
-        const result = schedules.map(sch => {
-            const myAttendance = attendanceData.filter(a => a.schedule_id === sch.id)
-            const sessions = []
-            const target = sch.planned_sessions || 4 
+        // --- STEP 4: Mapping Result (Penggabungan Jadwal + Absensi) ---
+        // Get mentor and student data separately since we removed relations
+        const mentorIds = [...new Set(schedules.map(s => s.mentor_id))];
+        const studentIds = [...new Set(schedules.map(s => s.student_id))];
+        
+        const { data: mentorsData } = await supabase
+            .from('mentors')
+            .select('id, name')
+            .in('id', mentorIds);
+            
+        const { data: studentsData } = await supabase
+            .from('students')
+            .select('id, name')
+            .in('id', studentIds);
+        
+        const finalResult = schedules.map(sch => {
+            const myAttendance = attendanceData 
+                ? attendanceData.filter(a => a.schedule_id === sch.id) 
+                : [];
+            
+            // Find mentor and student names
+            const mentor = mentorsData?.find(m => m.id === sch.mentor_id);
+            const student = studentsData?.find(s => s.id === sch.student_id);
+            
+            // Dinamis: Mentor A bisa 14 sesi, Mentor B bisa 8 sesi sesuai kolom di DB
+            const targetSessions = sch.planned_sessions || 8; 
+            const sessions = [];
 
-            for (let i = 1; i <= target; i++) {
-                const record = myAttendance.find(a => a.session_number === i)
+            // Loop berdasarkan jumlah sesi yang direncanakan
+            for (let i = 1; i <= targetSessions; i++) {
+                const record = myAttendance.find(a => parseInt(a.session_number) === i);
                 sessions.push({
                     number: i,
                     is_done: !!record,
                     status: record ? record.status : null,
                     date_recorded: record ? record.date : null,
                     bukti_foto: record ? record.bukti_foto : null
-                })
+                });
             }
 
+            // Kembalikan objek "Flattened" yang siap dikonsumsi Frontend
             return {
                 ...sch,
+                student_name: student?.name || 'Siswa Tidak Teridentifikasi',
+                mentor_name: mentor?.name || 'Mentor Tidak Teridentifikasi',
                 sessions_status: sessions,
-                total_done: myAttendance.length
+                total_done: myAttendance.length,
+                planned_sessions: targetSessions
             }
-        })
+        });
 
-        return res.json(result) // ✅ Return Array
+        // Response dalam bentuk Array murni sesuai kebutuhan useAttendance hook
+        return res.json(finalResult);
 
     } catch (err) {
-        return res.status(500).json({ error: err.message })
+        console.error('Dashboard Error:', err.message);
+        return res.status(500).json({ error: 'Gagal mengambil data absensi' });
     }
 }
 
-// 2. Submit Absensi dengan Foto Bukti (URL dari frontend)
+/**
+ * 2. Submit Absensi (Biasanya digunakan Mentor dengan upload foto)
+ */
 async function submitAttendance(req, res) {
     try {
         const { schedule_id, mentor_id, session_number, month, year, status, bukti_foto } = req.body
 
-        // ✅ SECURITY FIX: Input validation
+        // Validasi Input
         if (!schedule_id || !mentor_id || !session_number || !month || !year || !status) {
-            return res.status(400).json({ 
-                error: 'Data wajib tidak lengkap: schedule_id, mentor_id, session_number, month, year, status' 
-            })
+            return res.status(400).json({ error: 'Data input tidak lengkap' })
         }
 
-        // ✅ SECURITY FIX: Type validation
-        const sessionNum = parseInt(session_number)
-        const monthNum = parseInt(month)
-        const yearNum = parseInt(year)
-
-        if (isNaN(sessionNum) || sessionNum < 1 || sessionNum > 20) {
-            return res.status(400).json({ error: 'Session number harus antara 1-20' })
-        }
-
-        if (isNaN(monthNum) || monthNum < 1 || monthNum > 12) {
-            return res.status(400).json({ error: 'Month harus antara 1-12' })
-        }
-
-        if (isNaN(yearNum) || yearNum < 2020 || yearNum > 2030) {
-            return res.status(400).json({ error: 'Year harus antara 2020-2030' })
-        }
-
-        // ✅ SECURITY FIX: Status validation
-        const validStatuses = ['HADIR', 'IZIN', 'ALPA']
-        if (!validStatuses.includes(status)) {
-            return res.status(400).json({ error: 'Status harus HADIR, IZIN, atau ALPA' })
-        }
-
-        // Validasi: Jika status HADIR dan role MENTOR, bukti_foto wajib
-        if (status === 'HADIR' && req.user?.role === 'MENTOR' && !bukti_foto) {
-            return res.status(400).json({ 
-                error: 'Bukti foto wajib diupload untuk status HADIR' 
-            })
-        }
-
-        // Cek duplicate - gunakan maybeSingle untuk menghindari error jika tidak ada data
-        const { data: existing, error: existingError } = await supabase
+        // Cek Duplikasi: Mencegah double submit untuk sesi yang sama
+        const { data: duplicate } = await supabase
             .from('attendance')
             .select('id')
-            .eq('schedule_id', schedule_id)
-            .eq('session_number', sessionNum)
-            .eq('month', monthNum)
-            .eq('year', yearNum)
-            .maybeSingle()
+            .match({ schedule_id, session_number, month, year })
+            .maybeSingle();
 
-        if (existingError) {
-            console.error('Error checking duplicate attendance:', existingError)
-            return res.status(500).json({ error: 'Gagal memeriksa data absensi' })
+        if (duplicate) {
+            return res.status(400).json({ error: 'Absensi untuk sesi ini sudah tercatat' });
         }
 
-        if (existing) {
-            return res.status(400).json({ 
-                error: 'Absensi untuk sesi ini sudah tercatat' 
-            })
-        }
-
-        // Simpan absensi dengan bukti_foto URL
-        // Dapatkan tanggal jadwal dari schedule untuk sinkronisasi
-        const { data: scheduleData, error: scheduleError } = await supabase
-            .from('schedules')
-            .select('date')
-            .eq('id', schedule_id)
-            .maybeSingle()
-        
-        if (scheduleError) {
-            console.error('Error fetching schedule date:', scheduleError)
-            return res.status(500).json({ error: 'Gagal mengambil data jadwal' })
-        }
-
-        if (!scheduleData) {
-            return res.status(400).json({ error: 'Jadwal tidak ditemukan' })
-        }
-
-        const scheduleDate = scheduleData.date
-        const attendanceDate = new Date()
-        
-        // Validasi: apakah tanggal absensi sesuai dengan tanggal jadwal?
-        // Konversi ke tanggal saja (tanpa waktu) untuk perbandingan
-        const scheduleDateOnly = new Date(scheduleDate).toISOString().split('T')[0]
-        const attendanceDateOnly = attendanceDate.toISOString().split('T')[0]
-        
-        if (scheduleDateOnly !== attendanceDateOnly) {
-            console.warn(`⚠️ Absensi tanggal ${attendanceDateOnly} untuk jadwal tanggal ${scheduleDateOnly}`)
-            // Tidak menghentikan proses, hanya warning log
-        }
-
+        // Insert data ke database
         const { data, error } = await supabase
             .from('attendance')
             .insert([{
                 schedule_id,
-                mentor_id,
-                session_number: sessionNum,
-                month: monthNum,
-                year: yearNum,
+                mentor_id, 
+                session_number: parseInt(session_number),
+                month: parseInt(month),
+                year: parseInt(year),
                 status,
-                bukti_foto, // URL dari Supabase Storage
-                date: scheduleDate // Gunakan tanggal jadwal, bukan tanggal absensi
-                // recorded_at dihapus karena kolom tidak ada di database
+                bukti_foto: bukti_foto || null,
+                date: new Date().toISOString().split('T')[0] // Format YYYY-MM-DD
             }])
             .select()
 
         if (error) throw error
-
-        return res.json({ 
-            status: 'SUCCESS', 
-            message: 'Absensi berhasil disimpan',
-            data: data[0]
-        })
-
+        return res.json({ status: 'SUCCESS', data: data[0] })
     } catch (err) {
-        console.error('Submit attendance error:', err)
-        return res.status(500).json({ error: 'Gagal menyimpan absensi' })
+        console.error('Submit Error:', err.message);
+        return res.status(500).json({ error: err.message })
     }
 }
 
-// 3. Toggle Absensi (Legacy - untuk backward compatibility)
+/**
+ * 3. Toggle Absensi (Support Quick Check/Uncheck oleh Admin)
+ */
 async function toggleAttendance(req, res) {
     try {
-        const { schedule_id, mentor_id, session_number, month, year, status } = req.body
-
-        // Cek duplicate
+        const { schedule_id, mentor_id, session_number, month, year } = req.body
+        
+        // Cari apakah absensi sudah ada
         const { data: existing } = await supabase
             .from('attendance')
             .select('id')
-            .eq('schedule_id', schedule_id)
-            .eq('session_number', session_number)
-            .eq('month', month)
-            .eq('year', year)
-            .single()
+            .match({ schedule_id, session_number: parseInt(session_number), month: parseInt(month), year: parseInt(year) })
+            .maybeSingle()
 
         if (existing) {
-            // Hapus (Batal Hadir)
-            await supabase.from('attendance').delete().eq('id', existing.id)
-            return res.json({ status: 'REMOVED', message: 'Absensi dibatalkan' })
-        } else {
-            // Simpan (Hadir) - tanpa bukti foto untuk backward compatibility
-            // Dapatkan tanggal jadwal untuk sinkronisasi
-            const { data: scheduleData, error: scheduleError } = await supabase
-                .from('schedules')
-                .select('date')
-                .eq('id', schedule_id)
-                .single()
+            // Jika ada, maka hapus (Uncheck)
+            const { error: delError } = await supabase
+                .from('attendance')
+                .delete()
+                .eq('id', existing.id)
             
-            let scheduleDate = new Date()
-            if (!scheduleError && scheduleData) {
-                scheduleDate = scheduleData.date
-            }
-
-            await supabase.from('attendance').insert([{
-                schedule_id,
-                mentor_id,
-                session_number,
-                month,
-                year,
-                status: status || 'HADIR',
-                date: scheduleDate // Gunakan tanggal jadwal
-                // recorded_at dihapus karena kolom tidak ada di database
-            }])
-            return res.json({ status: 'ADDED', message: 'Absensi tersimpan' })
+            if (delError) throw delError
+            return res.json({ status: 'REMOVED' })
+        } else {
+            // Jika tidak ada, maka tambah (Check)
+            const { error: insError } = await supabase
+                .from('attendance')
+                .insert([{
+                    schedule_id, 
+                    mentor_id, 
+                    session_number: parseInt(session_number), 
+                    month: parseInt(month), 
+                    year: parseInt(year),
+                    status: 'HADIR',
+                    date: new Date().toISOString().split('T')[0]
+                }])
+            
+            if (insError) throw insError
+            return res.json({ status: 'ADDED' })
         }
-
     } catch (err) {
+        console.error('Toggle Error:', err.message);
         return res.status(500).json({ error: err.message })
     }
 }

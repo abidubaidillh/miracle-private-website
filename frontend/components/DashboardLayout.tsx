@@ -42,13 +42,7 @@ export default function DashboardLayout({ children, title }: DashboardLayoutProp
                     </div>
 
                     {/* Bagian Profil & Notifikasi */}
-                    <div className="flex items-center gap-6">
-                        {/* Notification Bell */}
-                        <button className="relative p-2.5 text-miracle-text-secondary hover:text-miracle-blue hover:bg-miracle-background rounded-xl transition-all duration-200 group">
-                            <Bell size={20} className="group-hover:scale-110 transition-transform" />
-                            <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-miracle-surface"></span>
-                        </button>
-                        
+                    <div className="flex items-center gap-6">                        
                         {/* Divider */}
                         <div className="h-8 w-[1px] bg-gray-200 mx-2"></div>
 

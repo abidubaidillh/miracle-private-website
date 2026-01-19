@@ -21,6 +21,9 @@ function parseAuthCookie(cookieHeader) {
 }
 
 const authMiddleware = async (req, res, next) => {
+  console.log(`[DEBUG AUTH] Request to: ${req.method} ${req.originalUrl}`)
+  console.log(`[DEBUG AUTH] Headers:`, req.headers.authorization ? 'Bearer token present' : 'No auth header')
+  
   try {
     let token = null
 
