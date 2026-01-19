@@ -93,24 +93,36 @@ async function getAttendanceDashboard(req, res) {
         const mentorIds = [...new Set(schedules.map(s => s.mentor_id))];
         const studentIds = [...new Set(schedules.map(s => s.student_id))];
         
-        const { data: mentorsData } = await supabase
+        console.log(`[DEBUG] Mentor IDs to fetch:`, mentorIds);
+        console.log(`[DEBUG] Student IDs to fetch:`, studentIds);
+        
+        const { data: mentorsData, error: mentorError } = await supabase
             .from('mentors')
             .select('id, name')
             .in('id', mentorIds);
             
-        const { data: studentsData } = await supabase
+        const { data: studentsData, error: studentError } = await supabase
             .from('students')
             .select('id, name')
             .in('id', studentIds);
+        
+        console.log(`[DEBUG] Mentors data:`, mentorsData);
+        console.log(`[DEBUG] Students data:`, studentsData);
+        console.log(`[DEBUG] Mentor error:`, mentorError);
+        console.log(`[DEBUG] Student error:`, studentError);
         
         const finalResult = schedules.map(sch => {
             const myAttendance = attendanceData 
                 ? attendanceData.filter(a => a.schedule_id === sch.id) 
                 : [];
             
-            // Find mentor and student names
+            // Find mentor and student names with better fallback
             const mentor = mentorsData?.find(m => m.id === sch.mentor_id);
             const student = studentsData?.find(s => s.id === sch.student_id);
+            
+            console.log(`[DEBUG] Schedule ${sch.id}: mentor_id=${sch.mentor_id}, student_id=${sch.student_id}`);
+            console.log(`[DEBUG] Found mentor:`, mentor);
+            console.log(`[DEBUG] Found student:`, student);
             
             // Dinamis: Mentor A bisa 14 sesi, Mentor B bisa 8 sesi sesuai kolom di DB
             const targetSessions = sch.planned_sessions || 8; 
@@ -131,8 +143,8 @@ async function getAttendanceDashboard(req, res) {
             // Kembalikan objek "Flattened" yang siap dikonsumsi Frontend
             return {
                 ...sch,
-                student_name: student?.name || 'Siswa Tidak Teridentifikasi',
-                mentor_name: mentor?.name || 'Mentor Tidak Teridentifikasi',
+                student_name: student?.name || `Student ID: ${sch.student_id}`,
+                mentor_name: mentor?.name || `Mentor ID: ${sch.mentor_id}`,
                 sessions_status: sessions,
                 total_done: myAttendance.length,
                 planned_sessions: targetSessions

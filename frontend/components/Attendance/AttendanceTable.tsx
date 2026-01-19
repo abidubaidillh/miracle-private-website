@@ -29,8 +29,8 @@ interface Schedule {
   start_time: string
   subject: string
   planned_sessions: number
-  mentors: { id: string; name: string }
-  students: { name: string }
+  mentor_name: string  // Changed from mentors relation
+  student_name: string // Changed from students relation
   sessions_status: SessionStatus[]
   total_done: number
 }
@@ -166,11 +166,11 @@ export default function AttendanceTable({
                         </span>
                         <span className="flex items-center gap-2 bg-miracle-background px-3 py-1.5 rounded-lg">
                           <User size={15} />
-                          <span className="font-medium">Mentor: {schedule.mentors?.name || '-'}</span>
+                          <span className="font-medium">Mentor: {schedule.mentor_name || '-'}</span>
                         </span>
                         <span className="flex items-center gap-2 bg-miracle-background px-3 py-1.5 rounded-lg">
                           <User size={15} className="rotate-90" />
-                          <span className="font-medium">Murid: {schedule.students?.name || '-'}</span>
+                          <span className="font-medium">Murid: {schedule.student_name || '-'}</span>
                         </span>
                       </div>
                     </div>
