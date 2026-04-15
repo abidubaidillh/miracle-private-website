@@ -1,6 +1,16 @@
 // frontend/lib/auth.ts
 
-export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+/**
+ * Normalisasi URL API
+ * Mencegah error //api/auth/login yang menyebabkan 404 di Production
+ */
+const getCleanApiUrl = () => {
+    const rawUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+    // Menghapus slash di paling akhir jika ada
+    return rawUrl.replace(/\/$/, ""); 
+};
+
+export const API_URL = getCleanApiUrl();
 
 export interface AuthObject {
   user: {
@@ -24,7 +34,6 @@ export interface AuthObject {
 
 /**
  * Mengambil data Auth dari Cookie
- * Digunakan baik oleh Client-side maupun logic internal lib ini
  */
 export function getAuthCookie(): AuthObject | null {
   if (typeof document === 'undefined') return null;
@@ -39,7 +48,6 @@ export function getAuthCookie(): AuthObject | null {
     const value = cookie.split('=')[1];
     const decodedValue = decodeURIComponent(value);
     
-    // Pastikan string adalah JSON yang valid
     if (decodedValue.startsWith('{')) {
         return JSON.parse(decodedValue) as AuthObject;
     }
@@ -52,7 +60,6 @@ export function getAuthCookie(): AuthObject | null {
 
 /**
  * Menyimpan data Auth ke Cookie
- * Path=/ sangat penting agar cookie bisa dibaca di semua sub-halaman
  */
 export function saveAuth(authObj: AuthObject) {
   if (typeof document === 'undefined') return;
@@ -65,13 +72,13 @@ export function saveAuth(authObj: AuthObject) {
   const val = encodeURIComponent(JSON.stringify(authObj));
   
   // Set Cookie dengan durasi 1 hari (86400 detik)
-  // Secure: hanya kirim lewat HTTPS (aktif jika di production)
-  // SameSite=Lax: perlindungan CSRF standar
   const isProd = process.env.NODE_ENV === 'production';
   document.cookie = `auth=${val}; path=/; max-age=86400; SameSite=Lax${isProd ? '; Secure' : ''}`;
   
-  // Sync ke localStorage sebagai backup (optional, untuk persistensi client-side ekstra)
-  localStorage.setItem('user_role', authObj.user.role.toUpperCase());
+  // Sync ke localStorage sebagai backup
+  if (authObj.user?.role) {
+    localStorage.setItem('user_role', authObj.user.role.toUpperCase());
+  }
 }
 
 /**
@@ -79,7 +86,6 @@ export function saveAuth(authObj: AuthObject) {
  */
 export function clearAuth() {
   if (typeof document === 'undefined') return;
-  // Menghapus cookie dengan mengeset max-age ke 0
   document.cookie = `auth=; path=/; max-age=0; SameSite=Lax`;
   localStorage.removeItem('user_role');
 }
@@ -89,7 +95,7 @@ export function clearAuth() {
 // ============================================================================
 
 /**
- * Mengambil Access Token untuk Authorization Header (Bearer)
+ * Mengambil Access Token untuk Authorization Header
  */
 export function getAuthToken(): string | null {
   const auth = getAuthCookie();
@@ -105,7 +111,7 @@ export function getCurrentUser() {
 }
 
 /**
- * Mengambil Role User (Dinormalisasi ke Uppercase)
+ * Mengambil Role User
  */
 export function getUserRole(): string | null {
   const user = getCurrentUser();
@@ -114,11 +120,10 @@ export function getUserRole(): string | null {
 }
 
 /**
- * Cek apakah user sedang login berdasarkan keberadaan token
+ * Cek apakah user sedang login
  */
 export function isAuthenticated(): boolean {
-  const token = getAuthToken();
-  return !!token;
+  return !!getAuthToken();
 }
 
 /**
@@ -140,23 +145,21 @@ export function setAuthToken(token: string, user: any) {
 // ============================================================================
 
 /**
- * Fungsi Logout Lengkap (Server Invalidation + Client Cleanup)
+ * Fungsi Logout Lengkap
  */
 export async function logoutUser() {
   try {
-    // 1. Invalidate di Backend (Opsional)
     const token = getAuthToken();
     if (token) {
+        // Menggunakan API_URL yang sudah dibersihkan
         await fetch(`${API_URL}/api/auth/logout`, { 
             method: 'POST',
             headers: { 'Authorization': `Bearer ${token}` }
         }).catch((err) => console.warn("Logout server error (ignored):", err));
     }
     
-    // 2. Hapus Jejak di Browser
     clearAuth();
     
-    // 3. Hapus data sisa di localStorage jika ada
     if (typeof window !== 'undefined') {
         localStorage.clear(); 
     }
