@@ -1,30 +1,15 @@
-// lib/studentActions.ts
+// frontend/lib/studentActions.ts
+import { fetchWithAuth } from './apiClient';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL 
-    ? `${process.env.NEXT_PUBLIC_API_URL}/api/students` 
-    : 'http://localhost:4000/api/students';
-
-// =============================================================================
-// HELPER: Get Auth Headers
-// =============================================================================
-const getHeaders = () => {
-    let token = '';
-    if (typeof document !== 'undefined') {
-        const match = document.cookie.match(new RegExp('(^| )auth=([^;]+)'));
-        if (match) {
-            try {
-                const authData = JSON.parse(decodeURIComponent(match[2]));
-                token = authData.session.access_token;
-            } catch (e) {
-                console.warn("Gagal parse token auth", e);
-            }
-        }
-    }
-    return {
-        'Content-Type': 'application/json',
-        'Authorization': token ? `Bearer ${token}` : ''
-    }
+/**
+ * Normalisasi URL API
+ */
+const getApiBase = () => {
+    const url = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+    return url.replace(/\/$/, "").replace(/\/api$/, "") + "/api/students";
 }
+
+const API_ENDPOINT = getApiBase();
 
 // =============================================================================
 // TIPE DATA
@@ -56,24 +41,22 @@ export async function getStudents(search: string = ""): Promise<StudentDataRespo
     const params = new URLSearchParams();
     if (search) params.append('search', search);
     
-    const url = `${API_BASE_URL}?${params.toString()}`;
+    const url = `${API_ENDPOINT}?${params.toString()}`;
 
     try {
-        const response = await fetch(url, {
+        const response = await fetchWithAuth(url, {
             method: 'GET',
-            headers: getHeaders(),
-            cache: 'no-store', 
         });
 
         if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.message || `Gagal fetch data murid`);
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.message || `Gagal mengambil data murid`);
         }
 
-        const data: StudentDataResponse = await response.json();
-        return data; 
+        return await response.json(); 
         
     } catch (e: any) {
+        if (e.message === 'SESSION_EXPIRED') throw e;
         console.error("Error fetching students:", e);
         return { students: [], stats: { active: 0, inactive: 0 } };
     }
@@ -83,52 +66,68 @@ export async function getStudents(search: string = ""): Promise<StudentDataRespo
 // 2. POST (CREATE)
 // =============================================================================
 export async function createStudent(newStudentData: Omit<Student, 'id'>): Promise<Student> {
-    const response = await fetch(API_BASE_URL, {
-        method: 'POST',
-        headers: getHeaders(),
-        body: JSON.stringify(newStudentData), // Pastikan di Form UI, key-nya sudah 'school_origin'
-    });
+    try {
+        // Pastikan address tidak undefined sebelum dikirim
+        const payload = {
+            ...newStudentData,
+            address: newStudentData.address || "",
+            age: Number(newStudentData.age) // Pastikan age adalah angka
+        };
 
-    const result = await response.json();
+        const response = await fetchWithAuth(API_ENDPOINT, {
+            method: 'POST',
+            body: JSON.stringify(payload),
+        });
 
-    if (!response.ok) {
-        // Jika Joi Validation gagal, error akan muncul di sini
-        throw new Error(result.message || result.errors?.[0]?.school_origin || 'Gagal menambahkan murid baru.');
+        const result = await response.json();
+
+        if (!response.ok) {
+            // Ini akan menangkap pesan "Wajib diisi" dari backend
+            throw new Error(result.message || result.error || 'Gagal menambahkan murid baru.');
+        }
+        
+        return result.student || result;
+    } catch (error: any) {
+        throw error;
     }
-    
-    return result.student as Student;
 }
 
 // =============================================================================
 // 3. PUT (UPDATE)
 // =============================================================================
 export async function updateStudent(studentId: string, updateData: Partial<Student>): Promise<Student> {
-    const response = await fetch(`${API_BASE_URL}/${studentId}`, {
-        method: 'PUT',
-        headers: getHeaders(),
-        body: JSON.stringify(updateData),
-    });
+    try {
+        const response = await fetchWithAuth(`${API_ENDPOINT}/${studentId}`, {
+            method: 'PUT',
+            body: JSON.stringify(updateData),
+        });
 
-    const result = await response.json();
+        const result = await response.json();
 
-    if (!response.ok) {
-        throw new Error(result.message || 'Gagal memperbarui data murid.');
+        if (!response.ok) {
+            throw new Error(result.message || result.error || 'Gagal memperbarui data murid.');
+        }
+        
+        return result.student || result;
+    } catch (error: any) {
+        throw error;
     }
-    
-    return result.student as Student;
 }
 
 // =============================================================================
 // 4. DELETE
 // =============================================================================
 export async function deleteStudent(studentId: string): Promise<void> {
-    const response = await fetch(`${API_BASE_URL}/${studentId}`, {
-        method: 'DELETE',
-        headers: getHeaders(),
-    });
+    try {
+        const response = await fetchWithAuth(`${API_ENDPOINT}/${studentId}`, {
+            method: 'DELETE',
+        });
 
-    if (!response.ok) {
-        const result = await response.json();
-        throw new Error(result.message || 'Gagal menghapus data murid.');
+        if (!response.ok) {
+            const result = await response.json().catch(() => ({}));
+            throw new Error(result.message || 'Gagal menghapus data murid.');
+        }
+    } catch (error: any) {
+        throw error;
     }
 }

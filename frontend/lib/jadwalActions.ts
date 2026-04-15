@@ -1,13 +1,24 @@
 // frontend/lib/jadwalActions.ts
 import { fetchWithAuth } from './apiClient';
-import { API_URL } from './auth'; // Ambil URL dinamis dari auth.ts
 
-// ✅ Gunakan API_URL dari config, jangan hardcode localhost lagi
-const API_BASE_URL = `${API_URL}/api/schedules`;
-const API_STUDENTS_URL = `${API_URL}/api/students`;
-const API_MENTORS_URL = `${API_URL}/api/mentors`;
+/**
+ * Normalisasi URL Dasar
+ * Memastikan tidak ada double slash (//) dan tidak ada double /api
+ */
+const getApiBase = () => {
+    const url = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+    // Hapus slash di akhir jika ada, hapus /api jika sudah ada, lalu tambah /api secara bersih
+    return url.replace(/\/$/, "").replace(/\/api$/, "") + "/api";
+}
 
-// Tipe Data
+const BASE_URL = getApiBase();
+const API_SCHEDULES = `${BASE_URL}/schedules`;
+const API_STUDENTS = `${BASE_URL}/students`;
+const API_MENTORS = `${BASE_URL}/mentors`;
+
+// =============================================================================
+// TIPE DATA
+// =============================================================================
 export interface Schedule {
     id: string;
     date: string;
@@ -18,55 +29,84 @@ export interface Schedule {
     mentors?: { id: string, name: string, phone_number?: string }; 
 }
 
-// 1. Fetch Jadwal
+// =============================================================================
+// 1. GET (READ)
+// =============================================================================
+
+/**
+ * Mengambil daftar jadwal dengan filter optional
+ */
 export async function getSchedules(filters: any = {}) {
     const params = new URLSearchParams();
     if (filters.date) params.append('date', filters.date);
     if (filters.mentor_id) params.append('mentor_id', filters.mentor_id);
     
-    // Gunakan template literal yang benar
-    const res = await fetchWithAuth(`${API_BASE_URL}?${params}`);
+    const url = `${API_SCHEDULES}?${params.toString()}`;
 
-    if (!res.ok) throw new Error('Gagal ambil jadwal');
-    return res.json();
+    try {
+        const res = await fetchWithAuth(url, { method: 'GET' });
+
+        if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            throw new Error(errData.message || 'Gagal ambil jadwal');
+        }
+        
+        return await res.json();
+    } catch (error: any) {
+        if (error.message === 'SESSION_EXPIRED') throw error;
+        console.error("Error getSchedules:", error);
+        throw error;
+    }
 }
 
-// 2. Helper & CRUD lainnya
+/**
+ * Helper untuk mendapatkan daftar murid (untuk dropdown di UI)
+ */
 export async function getStudentsList() {
-    const res = await fetchWithAuth(API_STUDENTS_URL);
-    if (!res.ok) throw new Error('Gagal ambil daftar murid');
-    const data = await res.json();
-    return data.students || [];
+    try {
+        const res = await fetchWithAuth(API_STUDENTS);
+        if (!res.ok) throw new Error('Gagal ambil daftar murid');
+        const data = await res.json();
+        return data.students || [];
+    } catch (error) {
+        console.error("Error getStudentsList:", error);
+        return [];
+    }
 }
 
+/**
+ * Helper untuk mendapatkan daftar mentor (untuk dropdown di UI)
+ */
 export async function getMentorsList() {
-    const res = await fetchWithAuth(API_MENTORS_URL);
-    if (!res.ok) throw new Error('Gagal ambil daftar mentor');
-    const data = await res.json();
-    return data.mentors || [];
+    try {
+        const res = await fetchWithAuth(API_MENTORS);
+        if (!res.ok) throw new Error('Gagal ambil daftar mentor');
+        const data = await res.json();
+        return data.mentors || [];
+    } catch (error) {
+        console.error("Error getMentorsList:", error);
+        return [];
+    }
 }
 
-export async function deleteSchedule(id: string) {
-    const res = await fetchWithAuth(`${API_BASE_URL}/${id}`, { 
-        method: 'DELETE',
-    });
-    if (!res.ok) throw new Error('Gagal hapus jadwal');
-}
+// =============================================================================
+// 2. CRUD OPERATIONS
+// =============================================================================
 
+/**
+ * Membuat jadwal baru
+ */
 export async function createSchedule(data: any) {
-    const res = await fetchWithAuth(API_BASE_URL, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
-    });
-    
-    if (!res.ok) {
-        let errorMessage = 'Gagal buat jadwal';
-        try {
-            const err = await res.json();
-            console.error('Backend error response:', err);
+    try {
+        const res = await fetchWithAuth(API_SCHEDULES, {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+        
+        if (!res.ok) {
+            let errorMessage = 'Gagal buat jadwal';
+            const err = await res.json().catch(() => ({}));
+            
             if (err.errors && Array.isArray(err.errors)) {
                 errorMessage = err.errors.map((e: any) => {
                     const key = Object.keys(e)[0];
@@ -74,13 +114,51 @@ export async function createSchedule(data: any) {
                 }).join(', ');
             } else if (err.message) {
                 errorMessage = err.message;
-            } else if (err.error) {
-                errorMessage = err.error;
             }
-        } catch (e) {
-            console.error('Failed to parse error response:', e);
+            throw new Error(errorMessage);
         }
-        throw new Error(errorMessage);
+        
+        return await res.json();
+    } catch (error) {
+        throw error;
     }
-    return res.json();
+}
+
+/**
+ * Menghapus jadwal berdasarkan ID
+ */
+export async function deleteSchedule(id: string) {
+    try {
+        const res = await fetchWithAuth(`${API_SCHEDULES}/${id}`, { 
+            method: 'DELETE',
+        });
+        
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.message || 'Gagal hapus jadwal');
+        }
+    } catch (error) {
+        throw error;
+    }
+}
+
+/**
+ * Memperbarui jadwal yang sudah ada
+ */
+export async function updateSchedule(id: string, data: any) {
+    try {
+        const res = await fetchWithAuth(`${API_SCHEDULES}/${id}`, {
+            method: 'PUT',
+            body: JSON.stringify(data),
+        });
+
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.message || 'Gagal update jadwal');
+        }
+
+        return await res.json();
+    } catch (error) {
+        throw error;
+    }
 }

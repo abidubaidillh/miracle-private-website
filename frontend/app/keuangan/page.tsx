@@ -14,28 +14,23 @@ import {
 } from 'lucide-react'
 import { useUser } from '@/context/UserContext'
 import { useLoading } from '@/context/LoadingContext'
-import { getAuthToken } from '@/lib/auth'
+// Import dari file action yang sudah kita perbaiki sebelumnya
+import { getFinanceSummary } from '@/lib/financeActions'
 
-// Helper Format Rupiah (Ditambah pengaman || 0 agar tidak NaN)
-const formatRupiah = (num: number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(num || 0)
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'
-
-const getFinanceSummary = async () => {
-    const token = getAuthToken()
-    const res = await fetch(`${API_BASE_URL}/api/finance/summary`, {
-        headers: { Authorization: `Bearer ${token}` }
-    })
-    if (!res.ok) throw new Error("Gagal mengambil data keuangan")
-    return res.json()
-}
+// Helper Format Rupiah
+const formatRupiah = (num: number) => 
+    new Intl.NumberFormat('id-ID', { 
+        style: 'currency', 
+        currency: 'IDR', 
+        minimumFractionDigits: 0 
+    }).format(num || 0)
 
 export default function KeuanganPage() {
     const { user } = useUser()
     const { withLoading } = useLoading()
     const router = useRouter()
 
-    // State awal disesuaikan dengan key dari backend
+    // State awal
     const [stats, setStats] = useState({ 
         totalIncome: 0, 
         totalExpense: 0, 
@@ -46,6 +41,7 @@ export default function KeuanganPage() {
     
     const [history, setHistory] = useState<any[]>([]) 
 
+    // Proteksi Role
     useEffect(() => {
         if (user) {
             const allowedRoles = ['OWNER', 'BENDAHARA'] 
@@ -55,26 +51,31 @@ export default function KeuanganPage() {
         }
     }, [user, router])
 
+    // Load Data menggunakan action terpusat
     useEffect(() => {
         const loadData = async () => {
             if (!user) return
+            
             await withLoading(async () => {
                 try {
+                    // Memanggil fungsi dari lib/financeActions.ts
                     const data = await getFinanceSummary()
-                    // Backend mengirim objek { stats: {...}, history: [...] }
+                    
                     if (data.stats) {
                         setStats(data.stats)
                     }
                     if (data.history) {
                         setHistory(data.history)
                     }
-                } catch (err) {
+                } catch (err: any) {
+                    // Jika session habis, biasanya ditangani oleh apiClient, 
+                    // tapi kita log di sini untuk debugging UI
                     console.error("Gagal memuat data keuangan:", err)
                 }
             })
         }
         loadData()
-    }, [user]) 
+    }, [user, withLoading]) 
 
     if (!user) return null
 
@@ -84,7 +85,7 @@ export default function KeuanganPage() {
             {/* 1. SECTION CARDS */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
                 
-                {/* Income Card - PAKAI totalIncome */}
+                {/* Income Card */}
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex flex-col justify-between h-32 relative overflow-hidden group">
                     <div className="absolute top-0 right-0 p-4 opacity-10 text-green-600 group-hover:scale-110 transition-transform">
                         <TrendingUp size={80} />
@@ -98,7 +99,7 @@ export default function KeuanganPage() {
                     </div>
                 </div>
 
-                {/* Expense Card - PAKAI totalExpense */}
+                {/* Expense Card */}
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex flex-col justify-between h-32 relative overflow-hidden group">
                     <div className="absolute top-0 right-0 p-4 opacity-10 text-red-600 group-hover:scale-110 transition-transform">
                         <TrendingDown size={80} />
