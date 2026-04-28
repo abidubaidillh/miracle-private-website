@@ -18,7 +18,28 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 // ==========================================================
-// 1. Import Routes
+// 1. Middleware Utama (CORS HARUS DI ATAS)
+// ==========================================================
+
+// Menangani CORS agar domain frontend (cPanel) bisa akses backend (Render)
+app.use(cors({ 
+    origin: [
+        'https://miracleprivateclass.com', 
+        'https://www.miracleprivateclass.com', // Tambahkan varian www
+        'http://localhost:3000'
+    ],
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+    optionsSuccessStatus: 200 // Untuk legacy browser (IE11, etc)
+}));
+
+app.use(express.json())
+app.use(express.urlencoded({ extended: true }))
+app.use(cookieParser())
+
+// ==========================================================
+// 2. Import Routes
 // ==========================================================
 const authRoutes = require('./routes/auth.routes')
 const muridRoutes = require('./routes/murid.routes')
@@ -33,43 +54,23 @@ const salaryRoutes = require('./routes/salary.routes')
 const operasionalRoutes = require('./routes/operasional.routes')
 
 // ==========================================================
-// 2. Middleware Utama
-// ==========================================================
-app.use(cors({ 
-    origin: [
-        'https://miracleprivateclass.com', 
-        'http://localhost:3000'
-    ],
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'] // WAJIB ada Authorization
-}));
-
-app.use(express.json())
-app.use(express.urlencoded({ extended: true }))
-app.use(cookieParser())
-
-// ==========================================================
 // 3. Health Check & Root
 // ==========================================================
 app.get('/api/health', async (req, res) => {
-    // TEMPORARY DEBUG: Check if debug parameter is present
     if (req.query.debug_mentor) {
         try {
             const supabase = require('./config/supabase');
             const mentor_auth_id = req.query.debug_mentor;
             
-            // Step 1: Check mentor profile
             const { data: mentorProfile, error: mentorError } = await supabase
                 .from('mentors')
                 .select('id, user_id, name, email')
                 .eq('user_id', mentor_auth_id)
                 .maybeSingle();
             
-            // Step 2: Check schedules with profile ID
             let schedules = [];
             if (mentorProfile) {
-                const { data: scheduleData, error: scheduleError } = await supabase
+                const { data: scheduleData } = await supabase
                     .from('schedules')
                     .select(`
                         *,
@@ -82,7 +83,6 @@ app.get('/api/health', async (req, res) => {
                 schedules = scheduleData || [];
             }
             
-            // Step 3: Check schedules with auth ID directly
             const { data: directSchedules, error: directError } = await supabase
                 .from('schedules')
                 .select(`
@@ -123,7 +123,7 @@ app.get('/', (req, res) => {
 })
 
 // ==========================================================
-// 4. Mount Routes (Diseragamkan dengan /api)
+// 4. Mount Routes
 // ==========================================================
 
 console.log('--- MOUNTING ROUTES ---')
@@ -138,16 +138,15 @@ const mount = (path, route, name) => {
     }
 }
 
-// Semua route sekarang menggunakan prefix /api agar sinkron dengan frontend
 mount('/api/auth', authRoutes, 'Auth Routes')
 mount('/api/students', muridRoutes, 'Murid Routes')
 mount('/api/mentors', mentorRoutes, 'Mentor Routes')
 mount('/api/packages', paketRoutes, 'Paket Routes')
 mount('/api/schedules', jadwalRoutes, 'Jadwal Routes')
-mount('/api/payments', paymentRoutes, 'Payment Routes') // Sebelumnya /payments
+mount('/api/payments', paymentRoutes, 'Payment Routes')
 mount('/api/attendance', attendanceRoutes, 'Attendance Routes')
 mount('/api/transactions', transactionRoutes, 'Transaction Routes')
-mount('/api/finance', financeRoutes, 'Finance Routes') // Sebelumnya /finance
+mount('/api/finance', financeRoutes, 'Finance Routes')
 mount('/api/salaries', salaryRoutes, 'Salary Routes')
 mount('/api/operasional', operasionalRoutes, 'Operasional Routes')
 
